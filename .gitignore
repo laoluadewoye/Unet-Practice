@@ -1,0 +1,4 @@
+.idea/
+*cache*
+data/
+training_output/
