@@ -4,20 +4,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
+# Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
 class DiffusionSinPosEmbeds(nn.Module):
-    def __init__(self, dim):
+    def __init__(self, dimensions, theta=10000):
         super().__init__()
-        self.dim = dim
+        self.dimensions = dimensions
+        self.theta = theta
 
     def forward(self, time):
         device = time.device
-        half_dim = self.dim // 2
-        embeddings = math.log(10000) / (half_dim - 1)
-        embeddings = torch.exp(torch.arange(half_dim, device=device) * -embeddings)
+        half_dimensions = self.dimensions // 2
+        embeddings = math.log(self.theta) / (half_dimensions - 1)
+        embeddings = torch.exp(torch.arange(half_dimensions, device=device) * -embeddings)
         embeddings = time[:, None] * embeddings[None, :]
         embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
-        # TODO: Double check the ordering here
         return embeddings
 
 
@@ -187,7 +187,7 @@ class UNETTwo(nn.Module):
         self.need_denoise = denoise_diff
         if self.need_denoise:
             self.time_embeds = nn.Sequential(
-                DiffusionSinPosEmbeds(denoise_embed_count),
+                DiffusionSinPosEmbeds(denoise_embed_count, theta=10000),
                 nn.Linear(denoise_embed_count, denoise_embed_count),
                 nn.ReLU()
             )
