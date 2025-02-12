@@ -239,8 +239,7 @@ class UNETTwo(nn.Module):
             cur_down = down_encoded
 
         # Bottleneck phase
-        bn = self.bottle_neck(cur_down, time_embed)
-        cur_up = bn
+        cur_up = self.bottle_neck(cur_down, time_embed)
 
         # Upsample through list
         for up_sampler in self.up_samplers:
