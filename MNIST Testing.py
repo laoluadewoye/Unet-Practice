@@ -55,7 +55,7 @@ conv_filters = [64, 128, 256, 512]
 mnist_classes = 10
 my_out_layer = PoolSoftmaxOutput(in_channels=conv_filters[0], out_classes=mnist_classes)
 optim_loss_rate = 0.002
-model = GeneralUNETModel(
+mnist_model = GeneralUNETModel(
     name='unet_attention_mnist_model', in_dimensions=dimensions, in_channels=channels, conv_channels=conv_filters,
     out_layer=my_out_layer, use_up_atten=True, use_dconv_bn=True, use_dconv_relu=True, loss_rate=optim_loss_rate
 )
@@ -64,6 +64,6 @@ model = GeneralUNETModel(
 epoch_count = 1
 print_interval = max(1, len(train_loader) // 100)
 loss_module = nn.CrossEntropyLoss()
-model_train_stats = model.train_model(
+model_train_stats = mnist_model.train_model(
     train_loader=train_loader, epochs=epoch_count, loss_func=loss_module, print_interval=print_interval
 )

@@ -64,27 +64,27 @@ class DiffusionUNETModel:
         return torch.linspace(start, end, time_steps)
 
     @staticmethod
-    def get_index_from_list(vals, t, x_shape):
+    def get_index_from_list(vals, time_step, x_shape):
         """
         Returns a specific index t of a passed list of values vals
         while considering the batch dimension.
         """
-        batch_size = t.shape[0]
-        out = vals.gather(-1, t.cpu())
-        return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
+        batch_size = time_step.shape[0]
+        out = vals.gather(-1, time_step.cpu())
+        return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(time_step.device)
 
-    def forward_diffusion_sample(self, batch_img_0, time_steps, device):
+    def forward_diffusion_sample(self, batch_imgs, batch_time_steps, device):
         """
         Takes an image and a timestep as input and
         returns the noisy version of it
         """
-        noise = torch.randn_like(batch_img_0)
-        sqrt_alphas_cumprod_t = self.get_index_from_list(self.sqrt_a_s_cum_product, time_steps, batch_img_0.shape)
+        noise = torch.randn_like(batch_imgs)
+        sqrt_alphas_cumprod_t = self.get_index_from_list(self.sqrt_a_s_cum_product, batch_time_steps, batch_imgs.shape)
         sqrt_one_minus_alphas_cumprod_t = self.get_index_from_list(
-            self.sqrt_minus_a_s_cum_product, time_steps, batch_img_0.shape
+            self.sqrt_minus_a_s_cum_product, batch_time_steps, batch_imgs.shape
         )
 
-        mean = sqrt_alphas_cumprod_t.to(device) * batch_img_0.to(device)
+        mean = sqrt_alphas_cumprod_t.to(device) * batch_imgs.to(device)
         variance = sqrt_one_minus_alphas_cumprod_t.to(device) * noise.to(device)
         return mean + variance, noise.to(device)
 
@@ -111,9 +111,7 @@ class DiffusionUNETModel:
         Applies noise to this image, if we are not in the last step yet.
         """
         betas_t = self.get_index_from_list(self.beta_schedule, t, x.shape)
-        sqrt_one_minus_alphas_cumprod_t = self.get_index_from_list(
-            self.sqrt_minus_a_s_cum_product, t, x.shape
-        )
+        sqrt_one_minus_alphas_cumprod_t = self.get_index_from_list(self.sqrt_minus_a_s_cum_product, t, x.shape)
         sqrt_recip_alphas_t = self.get_index_from_list(self.sqrt_recip_a_s, t, x.shape)
 
         # Call model (current image - noise prediction)
@@ -174,22 +172,22 @@ class DiffusionUNETModel:
 
         # Loop through epoch
         for epoch in range(epochs):
-            for i, train_batch in enumerate(train_loader, 1):
+            for i, (batch_data, _) in enumerate(train_loader, 1):
                 # Reset optimizer
                 self.optimizer.zero_grad()
 
-                # Generate random time steps
-                rand_time_step = torch.randint(0, self.time_steps, (batch_size,), device=device).long()
+                # Generate random time step for testing
+                rand_batch_time_steps = torch.randint(0, self.time_steps, (batch_size,), device=device).long()
 
-                # Use only the first element for some reason???
+                # TODO: Use only the first element for some reason???
                 # Get a pre-compiled forward diffusion step and random noise to try to predict
-                noisy_batch_img_0, rand_img_noise = self.forward_diffusion_sample(
-                    train_batch[0], rand_time_step, device
+                noisy_batch_imgs, rand_batch_noise = self.forward_diffusion_sample(
+                    batch_data, rand_batch_time_steps, device
                 )
-                pred_img_noise = self.model(noisy_batch_img_0, rand_time_step)
+                pred_batch_noise = self.model(noisy_batch_imgs, rand_batch_time_steps)
 
                 # Calculate loss
-                noise_abs_loss = F.l1_loss(rand_img_noise, pred_img_noise)
+                noise_abs_loss = F.l1_loss(rand_batch_noise, pred_batch_noise)
                 noise_abs_loss.backward()
                 self.optimizer.step()
 
@@ -200,8 +198,8 @@ class DiffusionUNETModel:
 
                 # Print findings and generate progress sample image
                 if i % print_interval == 0:
-                    print(f"Epoch {epoch} | step {i:03d} Loss: {noise_abs_loss.cpu().item()} ")
-                    fp = f"{result_folder}/sample_img_{epoch + 1:03d}_{i:03d}.png"
+                    print(f"Epoch {epoch+1} | step {i:03d} Loss: {noise_abs_loss.cpu().item()} ")
+                    fp = f"{result_folder}/sample_img_{epoch+1:03d}_{i:03d}.png"
                     self.sample_plot_image(sample_img_size, device, fp)
 
                 # Save the model if it beats the current lowest loss
@@ -216,7 +214,7 @@ class DiffusionUNETModel:
 
         # Create dataframe then csv
         results_df = pd.DataFrame(results)
-        results_df.to_csv(f"{result_folder}/{self.model_name}_training_results.csv")
+        results_df.to_csv(f"{result_folder}/{self.model_name}_training_results.csv", index=False)
 
         return results_df
 
@@ -313,7 +311,7 @@ class GeneralUNETModel:
 
         # Create dataframe then csv
         results_df = pd.DataFrame(results)
-        results_df.to_csv(f"{result_folder}/{self.model_name}_training_results.csv")
+        results_df.to_csv(f"{result_folder}/{self.model_name}_training_results.csv", index=False)
 
         return results_df
 

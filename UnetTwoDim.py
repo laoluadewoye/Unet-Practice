@@ -1,7 +1,6 @@
 import torch
 import math
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 # Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
