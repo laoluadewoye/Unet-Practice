@@ -73,18 +73,18 @@ class DiffusionUNETModel:
         out = vals.gather(-1, t.cpu())
         return out.reshape(batch_size, *((1,) * (len(x_shape) - 1))).to(t.device)
 
-    def forward_diffusion_sample(self, x_0, t, device):
+    def forward_diffusion_sample(self, batch_img_0, time_steps, device):
         """
         Takes an image and a timestep as input and
         returns the noisy version of it
         """
-        noise = torch.randn_like(x_0)
-        sqrt_alphas_cumprod_t = self.get_index_from_list(self.sqrt_a_s_cum_product, t, x_0.shape)
+        noise = torch.randn_like(batch_img_0)
+        sqrt_alphas_cumprod_t = self.get_index_from_list(self.sqrt_a_s_cum_product, time_steps, batch_img_0.shape)
         sqrt_one_minus_alphas_cumprod_t = self.get_index_from_list(
-            self.sqrt_minus_a_s_cum_product, t, x_0.shape
+            self.sqrt_minus_a_s_cum_product, time_steps, batch_img_0.shape
         )
 
-        mean = sqrt_alphas_cumprod_t.to(device) * x_0.to(device)
+        mean = sqrt_alphas_cumprod_t.to(device) * batch_img_0.to(device)
         variance = sqrt_one_minus_alphas_cumprod_t.to(device) * noise.to(device)
         return mean + variance, noise.to(device)
 
@@ -179,34 +179,36 @@ class DiffusionUNETModel:
                 self.optimizer.zero_grad()
 
                 # Generate random time steps
-                t = torch.randint(0, self.time_steps, (batch_size,), device=device).long()
+                rand_time_step = torch.randint(0, self.time_steps, (batch_size,), device=device).long()
 
                 # Use only the first element for some reason???
-                # Get a pre-compiled forward diffusion sample and calculate prediction
-                noisy_tb0, noise = self.forward_diffusion_sample(train_batch[0], t, device)
-                noise_pred = self.model(noisy_tb0, t)
+                # Get a pre-compiled forward diffusion step and random noise to try to predict
+                noisy_batch_img_0, rand_img_noise = self.forward_diffusion_sample(
+                    train_batch[0], rand_time_step, device
+                )
+                pred_img_noise = self.model(noisy_batch_img_0, rand_time_step)
 
                 # Calculate loss
-                noise_loss = F.l1_loss(noise, noise_pred)
-                noise_loss.backward()
+                noise_abs_loss = F.l1_loss(rand_img_noise, pred_img_noise)
+                noise_abs_loss.backward()
                 self.optimizer.step()
 
                 # Save findings
                 results["epoch"].append(epoch + 1)
                 results["batch"].append(i)
-                results["loss"].append(noise_loss.cpu().item())
+                results["loss"].append(noise_abs_loss.cpu().item())
 
                 # Print findings and generate progress sample image
                 if i % print_interval == 0:
-                    print(f"Epoch {epoch} | step {i:03d} Loss: {noise_loss.cpu().item()} ")
+                    print(f"Epoch {epoch} | step {i:03d} Loss: {noise_abs_loss.cpu().item()} ")
                     fp = f"{result_folder}/sample_img_{epoch + 1:03d}_{i:03d}.png"
                     self.sample_plot_image(sample_img_size, device, fp)
 
                 # Save the model if it beats the current lowest loss
-                if noise_loss.cpu().item() < running_loss or running_loss == -1.0:
-                    print(f"New best loss score: {noise_loss.cpu().item()}")
+                if noise_abs_loss.cpu().item() < running_loss or running_loss == -1.0:
+                    print(f"New best loss score: {noise_abs_loss.cpu().item()}")
                     print("Saving epoch model...")
-                    running_loss = noise_loss.cpu().item()
+                    running_loss = noise_abs_loss.cpu().item()
                     torch.save(self.model.state_dict(), f"{result_folder}/{self.model_name}_epoch_{epoch + 1}.pt")
 
         # Move everything back to cpu
