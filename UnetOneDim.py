@@ -143,22 +143,39 @@ class AttentionOne(nn.Module):
         return skip * masked_int
 
 
+# TODO
 class UpSampleOne(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, use_attention=False, dconv_time=False, time_embed_count=0,
+                 dconv_bnorm=False, dconv_relu=False):
         super().__init__()
+
         # 1D Upscale with channel shrinkage
         self.up = nn.ConvTranspose1d(in_channels, out_channels, kernel_size=2, stride=2)
 
+        # Attention block but only if needed
+        self.need_attention = use_attention
+        if self.need_attention:
+            self.attention = AttentionOne(in_channels // 2, out_channels // 2)
+        else:
+            self.attention = None
+
         # Double Convolution Step (assumes skip connection is present to combine long and short paths)
-        self.conv = DoubleConvOne(in_channels, out_channels)
+        self.conv = DoubleConvOne(
+            in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
+            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+        )
 
-    def forward(self, x1, x2):
-        # Upscale
-        x1 = self.up(x1)
+    def forward(self, cur, skip, time_embed=None):
+        # Upscale from the last encoding
+        cur_upscaled = self.upscaler(cur)
 
-        # Combine then final convolution
-        x = torch.cat([x1, x2], 1)
-        return self.conv(x)
+        # Apply attention block to skip connection if needed
+        if self.need_attention:
+            skip = self.attention(cur_upscaled, skip)
+
+        # Combine results then final convolution
+        combined = torch.cat([cur_upscaled, skip], 1)
+        return self.conv(combined, time_embed)
 
 
 class UNETOne(nn.Module):
