@@ -143,7 +143,6 @@ class AttentionOne(nn.Module):
         return skip * masked_int
 
 
-# TODO
 class UpSampleOne(nn.Module):
     def __init__(self, in_channels, out_channels, use_attention=False, dconv_time=False, time_embed_count=0,
                  dconv_bnorm=False, dconv_relu=False):
@@ -179,42 +178,71 @@ class UpSampleOne(nn.Module):
 
 
 class UNETOne(nn.Module):
-    def __init__(self, in_channels, channel_list, out_layer):
+    def __init__(self, in_channels, channel_list, out_layer, denoise_diff=False, denoise_embed_count=0,
+                 up_attention=False, dconv_bnorm=False, dconv_relu=False):
         super().__init__()
 
+        # Create Sinusoidal Time Embedding
+        self.need_denoise = denoise_diff
+        if self.need_denoise:
+            self.time_embeds = nn.Sequential(
+                DiffusionSinPosEmbeds(denoise_embed_count, theta=10000),
+                nn.Linear(denoise_embed_count, denoise_embed_count),
+                nn.ReLU()
+            )
+
         # Create down samplers using nn.ModuleList
-        self.down_samplers = nn.ModuleList([
-            DownSampleOne(in_channels if i == 0 else channel_list[i - 1], channel_list[i])
-            for i in range(len(channel_list) - 1)
-        ])
+        down_smap = []
+        for i in range(len(channel_list) - 1):
+            cur_in_channels = in_channels if i == 0 else channel_list[i - 1]
+            down_smap.append(DownSampleOne(
+                cur_in_channels, channel_list[i], dconv_time=self.need_denoise,
+                time_embed_count=denoise_embed_count, dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+            ))
+        self.down_samplers = nn.ModuleList(down_smap)
 
         # Create bottleneck transition
-        self.bottle_neck = DoubleConvOne(channel_list[-2], channel_list[-1])
+        self.bottle_neck = DoubleConvOne(
+            channel_list[-2], channel_list[-1], use_time=self.need_denoise, time_embed_count=denoise_embed_count,
+            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+        )
 
         # Create up samplers using nn.ModuleList
-        self.up_samplers = nn.ModuleList([
-            UpSampleOne(channel_list[i], channel_list[i - 1])
-            for i in range(len(channel_list) - 1, 0, -1)
-        ])
+        up_samp = []
+        for i in range(len(channel_list) - 1, 0, -1):
+            cur_attention = up_attention and i > 1
+            up_samp.append(UpSampleOne(
+                channel_list[i], channel_list[i - 1], use_attention=cur_attention, dconv_time=self.need_denoise,
+                time_embed_count=denoise_embed_count, dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+            ))
+        self.up_samplers = nn.ModuleList(up_samp)
 
+        # Set custom output layer
         self.out_layer = out_layer
 
-    def forward(self, x):
+    def forward(self, batch, time_step=None):
+        # Prepare encoder
         skip_connections = []
-        cur_pool = x
+        cur_down = batch
+
+        # Get time embedding if needed
+        if self.need_denoise:
+            time_embed = self.time_embeds(time_step)
+        else:
+            time_embed = None
 
         # Downsample through list
         for down_sampler in self.down_samplers:
-            down_skip, pool = down_sampler(cur_pool)
+            down_skip, down_encoded = down_sampler(cur_down, time_embed)
             skip_connections.append(down_skip)
-            cur_pool = pool
+            cur_down = down_encoded
 
         # Bottleneck phase
-        bn = self.bottle_neck(cur_pool)
-        cur_up = bn
+        cur_up = self.bottle_neck(cur_down, time_embed)
 
         # Upsample through list
         for up_sampler in self.up_samplers:
-            cur_up = up_sampler(cur_up, skip_connections.pop())
+            cur_up = up_sampler(cur_up, skip_connections.pop(), time_embed)
 
+        # Apply custom output layer and return
         return self.out_layer(cur_up)
