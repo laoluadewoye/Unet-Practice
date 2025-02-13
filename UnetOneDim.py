@@ -77,22 +77,70 @@ class DoubleConvOne(nn.Module):
 
 
 class DownSampleOne(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dconv_time=False, time_embed_count=0,
+                 dconv_bnorm=False, dconv_relu=False):
         super().__init__()
+
         # Double Convolution Step
-        self.conv = DoubleConvOne(in_channels, out_channels)
+        self.conv = DoubleConvOne(
+            in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
+            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+        )
 
         # 1D Max Pooling to Shrink image
         self.pool = nn.MaxPool1d(kernel_size=2, stride=2)
 
-    def forward(self, x):
+    def forward(self, batch, time_embed=None):
         # Channel change for skip connection
-        down = self.conv(x)
+        conv_batch = self.conv(batch, time_embed)
 
         # Downsample for next step
-        p = self.pool(down)
+        encoded_batch = self.pool(conv_batch)
 
-        return down, p
+        return conv_batch, encoded_batch
+
+
+class AttentionOne(nn.Module):
+    def __init__(self, dec_skip_channels, inter_channels):
+        super().__init__()
+
+        # Perform 1x1 convolution on decoder channels
+        self.decoder_conv = nn.Sequential(
+            nn.Conv1d(dec_skip_channels, inter_channels, 1),
+            nn.BatchNorm1d(inter_channels),
+        )
+
+        # Perform 1x1 convolution on skip connections
+        self.skip_conv = nn.Sequential(
+            nn.Conv1d(dec_skip_channels, inter_channels, 1),
+            nn.BatchNorm1d(inter_channels),
+        )
+
+        # Create an attention mask
+        self.masker = nn.Sequential(
+            nn.Conv1d(inter_channels, 1, 1),
+            nn.BatchNorm1d(1),
+            nn.Sigmoid()
+        )
+
+        # Activation function for Spatial Attention Block
+        self.activation = nn.ReLU(inplace=True)
+
+    def forward(self, decoder, skip):
+        # Create an intermediate decoder representation
+        decoder_int = self.decoder_conv(decoder)
+
+        # Create an intermediate skip representation
+        skip_int = self.skip_conv(skip)
+
+        # Add together then apply activation to keep only noticeable features from both representations
+        combo_int = self.activation(decoder_int + skip_int)
+
+        # Create a normalized attention mask to specify where to pay "attention" to
+        masked_int = self.masker(combo_int)
+
+        # Adjust the skip connection information using the mask to tailor the information
+        return skip * masked_int
 
 
 class UpSampleOne(nn.Module):
