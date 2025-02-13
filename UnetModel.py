@@ -179,7 +179,6 @@ class DiffusionUNETModel:
                 # Generate random time step for testing
                 rand_batch_time_steps = torch.randint(0, self.time_steps, (batch_size,), device=device).long()
 
-                # TODO: Use only the first element for some reason???
                 # Get a pre-compiled forward diffusion step and random noise to try to predict
                 noisy_batch_imgs, rand_batch_noise = self.forward_diffusion_sample(
                     batch_data, rand_batch_time_steps, device

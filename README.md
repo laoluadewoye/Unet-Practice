@@ -11,14 +11,22 @@ way, I wouldn't have to manually add blocks to my model every time I wanted to a
 
 From there, I learned what Attention was and created my own simple version of that with some guidance. From there, I
 beefed up the model with some batch modularization, activation functions, and added the ability to enable and disable
-stuff through optional parameters. I am using the MNIST dataset to mess around with it and see how it works.
+stuff through optional parameters. Lastly, I added the ability to use time embeddings and created a diffusion "shell"
+model that can sit around the UNET to handle all the denoising steps for a complete diffusion model.
 
-I'm currently working on the diffusion part of it, but feel free to explore. Here is the colab I am using since
-my computer does not have cuda enabled for pytorch and installing it would...be a pain I am not dealing with right now.
+I am still working on adding more and more to it, and currently it is kind of a trash image generator, but the more 
+options I add to it, the more customizable I can make everything at the click of a button which is nice.
 
-# Google Colab
+# Google Colab Link
 
-You can use GPUs for free as of February 2025. You can just copy my stuff into your own notebook if you want. There
-is also a requirements folder to timestamp what library versions I use.
+You can use GPUs for free as of February 2025, but it has a limited runtime. You can just copy my stuff into your own 
+notebook if you want. There is also a requirements folder to timestamp what library versions I use.
 
 https://colab.research.google.com/drive/1lOn-XvXf3O6jaqZSc4LVkkmBC5E6EHf7?usp=sharing
+
+After I found out about the limited runtime, I had to create my own local environment. I have an nvidia drive, and
+pytorch has resources on how to download the necessary stuff. https://pytorch.org/get-started/locally/
+
+My suggestion is to pick a drive with a decent amount of space you can play around and create a virtual environment,
+and when you are installing, pick a place with a good connection. The stuff in my requirements folder took up around
+2.5GB of space.
