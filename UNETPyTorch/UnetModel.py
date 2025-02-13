@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from UnetOneDim import UNETOne
 from UnetTwoDim import UNETTwo
+from UnetThreeDim import UNETThree
 
 
 # Model based on DeepFind's "Diffusion models from scratch in PyTorch" video using my dynamic UNET as a base.
@@ -27,9 +28,17 @@ class DiffusionUNETModel:
         self.model_name = name
         self.dim_count = in_dimensions
         if in_dimensions == 1:
-            self.model = UNETOne(in_channels, conv_channels, out_layer)
+            self.model = UNETOne(
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
+                denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+            )
         elif in_dimensions == 2:
             self.model = UNETTwo(
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
+                denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+            )
+        elif in_dimensions == 3:
+            self.model = UNETThree(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
                 denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )
@@ -221,8 +230,8 @@ class DiffusionUNETModel:
 class GeneralUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
                  use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002):
-        assert in_dimensions in [1, 2], (
-            "in_dimensions must be 1 or 2."
+        assert 1 <= in_dimensions <= 3, (
+            "in_dimensions must be 1D, 2D, or 3D."
         )
 
         assert len(conv_channels) > 1, (
@@ -234,9 +243,17 @@ class GeneralUNETModel:
 
         # Model
         if in_dimensions == 1:
-            self.model = UNETOne(in_channels, conv_channels, out_layer)
+            self.model = UNETOne(
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten,
+                dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+            )
         elif in_dimensions == 2:
             self.model = UNETTwo(
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten,
+                dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+            )
+        elif in_dimensions == 3:
+            self.model = UNETThree(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten,
                 dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )

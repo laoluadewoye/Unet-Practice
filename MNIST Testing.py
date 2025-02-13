@@ -1,4 +1,4 @@
-from UnetModel import GeneralUNETModel
+from UNETPyTorch.UnetModel import GeneralUNETModel
 import torch.nn as nn
 import torch.nn.functional as F
 
