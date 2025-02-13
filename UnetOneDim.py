@@ -1,22 +1,79 @@
 import torch
+import math
 import torch.nn as nn
 
 
-class DoubleConvOne(nn.Module):
-    def __init__(self, in_channels, out_channels):
+# Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
+class DiffusionSinPosEmbeds(nn.Module):
+    def __init__(self, dimensions, theta=10000):
         super().__init__()
-        self.conv_op = nn.Sequential(
-            # Transfer to new level of channels + ReLU
-            nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True),
+        self.dimensions = dimensions
+        self.theta = theta
 
-            # Second Convolution + ReLU
-            nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.ReLU(inplace=True)
-        )
+    def forward(self, time):
+        device = time.device
+        half_dimensions = self.dimensions // 2
+        embeddings = math.log(self.theta) / (half_dimensions - 1)
+        embeddings = torch.exp(torch.arange(half_dimensions, device=device) * -embeddings)
+        embeddings = time[:, None] * embeddings[None, :]
+        embeddings = torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
+        return embeddings
 
-    def forward(self, x):
-        return self.conv_op(x)
+
+class DoubleConvOne(nn.Module):
+    def __init__(self, in_channels, out_channels, use_time=False, time_embed_count=0, use_bnorm=False, use_relu=False):
+        super().__init__()
+
+        # First Convolution + Batch Norm and ReLU options
+        first_conv_list = [nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1)]
+        if use_bnorm:
+            first_conv_list.append(nn.BatchNorm1d(out_channels))
+        if use_relu:
+            first_conv_list.append(nn.ReLU(inplace=True))
+        self.first_conv = nn.Sequential(*first_conv_list)
+
+        # Optional time modification
+        self.need_time = use_time
+        if self.need_time:
+            self.embed_adjuster = nn.Sequential(
+                nn.Linear(time_embed_count, out_channels),
+                nn.ReLU()
+            )
+        else:
+            self.embed_adjuster = None
+
+        # Second Convolution + Batch Norm and ReLU options
+        sec_conv_list = [nn.Conv1d(out_channels, out_channels, kernel_size=3, padding=1)]
+        if use_bnorm:
+            sec_conv_list.append(nn.BatchNorm1d(out_channels))
+        if use_relu:
+            sec_conv_list.append(nn.ReLU(inplace=True))
+        self.sec_conv = nn.Sequential(*sec_conv_list)
+
+    def forward(self, batch, time_embed=None):
+        # Do first convolution set
+        batch = self.first_conv(batch)
+
+        # Create time embedding if needed
+        if self.need_time:
+            # Assert that the time_embed is not none
+            assert time_embed is not None, (
+                "Time embedding is not provided for double convolution step.\n"
+                f"\tDouble Conv Layer info: {self}.\n\n"
+            )
+
+            # Retrieves the embed given a time step
+            adjusted_time_embed = self.embed_adjuster(time_embed)
+
+            # Expands the shape to (batch, out_channels, 1)
+            adjusted_time_embed = adjusted_time_embed[(...,) + (None,)]
+
+            # Adds time-sensitive embeddings to batch
+            batch = batch + adjusted_time_embed
+
+        # Do second convolution set
+        batch = self.sec_conv(batch)
+        return batch
 
 
 class DownSampleOne(nn.Module):
