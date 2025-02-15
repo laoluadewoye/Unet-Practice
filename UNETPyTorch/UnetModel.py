@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from UnetOneDim import UNETOne
 from UnetTwoDim import UNETTwo
 from UnetThreeDim import UNETThree
+from UnetNDim import UNETNth
 
 
 # Model based on DeepFind's "Diffusion models from scratch in PyTorch" video using my dynamic UNET as a base.
@@ -18,7 +19,6 @@ class DiffusionUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
                  use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002, time_steps=300,
                  time_embed_count=32):
-        assert in_dimensions in [1, 2], "in_dimensions must be 1 or 2."
 
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
@@ -27,19 +27,24 @@ class DiffusionUNETModel:
         # Basic model information
         self.model_name = name
         self.dim_count = in_dimensions
-        if in_dimensions == 1:
+        if self.dim_count == 1:
             self.model = UNETOne(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
                 denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )
-        elif in_dimensions == 2:
+        elif self.dim_count == 2:
             self.model = UNETTwo(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
                 denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )
-        elif in_dimensions == 3:
+        elif self.dim_count == 3:
             self.model = UNETThree(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
+                denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+            )
+        else:
+            self.model = UNETNth(
+                in_dimensions, in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
                 denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )
         self.param_count = sum(p.numel() for p in self.model.parameters())
@@ -230,9 +235,6 @@ class DiffusionUNETModel:
 class GeneralUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
                  use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002):
-        assert 1 <= in_dimensions <= 3, (
-            "in_dimensions must be 1D, 2D, or 3D."
-        )
 
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
@@ -242,19 +244,24 @@ class GeneralUNETModel:
         self.dim_count = in_dimensions
 
         # Model
-        if in_dimensions == 1:
+        if self.dim_count == 1:
             self.model = UNETOne(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten,
                 dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )
-        elif in_dimensions == 2:
+        elif self.dim_count == 2:
             self.model = UNETTwo(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten,
                 dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )
-        elif in_dimensions == 3:
+        elif self.dim_count == 3:
             self.model = UNETThree(
                 in_channels, conv_channels, out_layer, up_attention=use_up_atten,
+                dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+            )
+        else:
+            self.model = UNETNth(
+                self.dim_count, in_channels, conv_channels, out_layer, up_attention=use_up_atten,
                 dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
             )
 
