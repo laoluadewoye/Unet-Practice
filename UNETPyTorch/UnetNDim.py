@@ -27,7 +27,9 @@ class DoubleConvN(nn.Module):
         super().__init__()
 
         # First Convolution + Batch Norm and ReLU options
-        first_conv_list = [ConvNd(dimensions, in_channels, out_channels, kernel_size=3, padding=1)]
+        first_conv_list = [
+            ConvNd(dimensions, in_channels, out_channels, kernel_size=3, strides=1, padding=1, dilation=1)
+        ]
         if use_bnorm:
             first_conv_list.append(BatchNormNd(dimensions, out_channels))
         if use_relu:
@@ -45,12 +47,16 @@ class DoubleConvN(nn.Module):
             self.embed_adjuster = None
 
         # Second Convolution + Batch Norm and ReLU options
-        sec_conv_list = [ConvNd(dimensions, out_channels, out_channels, kernel_size=3, padding=1)]
+        sec_conv_list = [
+            ConvNd(dimensions, out_channels, out_channels, kernel_size=3, strides=1, padding=1, dilation=1)
+        ]
         if use_bnorm:
             sec_conv_list.append(BatchNormNd(dimensions, out_channels))
         if use_relu:
             sec_conv_list.append(nn.ReLU(inplace=True))
         self.sec_conv = nn.Sequential(*sec_conv_list)
+
+        self.dimensions = dimensions
 
     def forward(self, batch, time_embed=None):
         # Do first convolution set
@@ -67,8 +73,8 @@ class DoubleConvN(nn.Module):
             # Retrieves the embed given a time step
             adjusted_time_embed = self.embed_adjuster(time_embed)
 
-            # Expands the shape to (batch, out_channels, 1, 1)
-            adjusted_time_embed = adjusted_time_embed[(...,) + (None,) * 2]
+            # Expands the shape to (batch, out_channels, *dimensions)
+            adjusted_time_embed = adjusted_time_embed[(...,) + (None,) * self.dimensions]
 
             # Adds time-sensitive embeddings to batch
             batch = batch + adjusted_time_embed
@@ -90,7 +96,7 @@ class DownSampleN(nn.Module):
         )
 
         # 2x2 Max Pooling to Shrink image
-        self.pool = MaxPoolNd(dimensions, kernel_size=2, stride=2)
+        self.pool = MaxPoolNd(dimensions, kernel_size=2, strides=2, padding=0, dilation=1)
 
     def forward(self, batch, time_embed=None):
         # Channel change for skip connection
@@ -108,20 +114,20 @@ class AttentionN(nn.Module):
 
         # Perform 1x1 convolution on decoder channels
         self.decoder_conv = nn.Sequential(
-            ConvNd(dimensions, dec_skip_channels, inter_channels, 1),
+            ConvNd(dimensions, dec_skip_channels, inter_channels, kernel_size=1, strides=1, padding=0, dilation=1),
             BatchNormNd(dimensions, inter_channels),
         )
 
         # Perform 1x1 convolution on skip connections
         self.skip_conv = nn.Sequential(
-            ConvNd(dimensions, dec_skip_channels, inter_channels, 1),
+            ConvNd(dimensions, dec_skip_channels, inter_channels, kernel_size=1, strides=1, padding=0, dilation=1),
             BatchNormNd(dimensions, inter_channels),
         )
 
         # Create an attention mask
         self.masker = nn.Sequential(
-            ConvNd(dimensions, inter_channels, 1, 1),
-            BatchNormNd(dimensions, 1),
+            ConvNd(dimensions, inter_channels, out_channels=1, kernel_size=1, strides=1, padding=0, dilation=1),
+            BatchNormNd(dimensions, out_channels=1),
             nn.Sigmoid()
         )
 
@@ -151,7 +157,9 @@ class UpSampleN(nn.Module):
         super().__init__()
 
         # 2x2 Upscale with channel shrinkage
-        self.upscaler = ConvTransposeNd(dimensions, in_channels, out_channels, kernel_size=2, strides=2)
+        self.upscaler = ConvTransposeNd(
+            dimensions, in_channels, out_channels, kernel_size=2, strides=2, padding=0, dilation=1, output_padding=0
+        )
 
         # Attention block but only if needed
         self.need_attention = use_attention
@@ -252,15 +260,13 @@ class UNETNth(nn.Module):
 
 
 if __name__ == '__main__':
-    # Create 4D Tensor
-    batch = torch.randn((1, 3, 16, 64, 64, 64))
-    print(batch.shape)
-    batch = batch.to("cuda")
-
-    # Create 4D UNET
-    model = UNETNth(dimensions=4, in_channels=3, channel_list=[64, 128, 256], out_layer=nn.Identity())
-    model = model.to("cuda")
-
-    # Run forward pass
-    out = model(batch).to("cpu")
-    print(out.shape)
+    # Create 5D UNETs
+    basic_model = UNETNth(
+        dimensions=5, in_channels=3, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Identity()
+    )
+    full_model = UNETNth(
+        dimensions=5, in_channels=3, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Identity(), denoise_diff=True,
+        denoise_embed_count=32, up_attention=True, dconv_bnorm=True, dconv_relu=True
+    )
+    print(f"{sum(p.numel() for p in basic_model.parameters()):,} total parameters in Base 5D 5-layer UNET")
+    print(f"{sum(p.numel() for p in full_model.parameters()):,} total parameters in Full 5D 5-layer UNET")

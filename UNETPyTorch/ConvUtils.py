@@ -95,7 +95,7 @@ class ConvNd(nn.Module):
         lower_dim_shape = shape[-self.dimensions + 1:]
 
         # Adjust the view to merge the batch and highest dimension, then the channels, then the lower dimensions
-        lower_tensor = nd_tensor.view(shape[0] * shape[2], shape[1], *lower_dim_shape)
+        lower_tensor = nd_tensor.reshape(shape[0] * shape[2], shape[1], *lower_dim_shape)
 
         # Work the lower dimension
         lower_tensor = getattr(self, self.lower_name)(lower_tensor)
@@ -107,7 +107,7 @@ class ConvNd(nn.Module):
         ]
 
         # Change everything back
-        lower_conv_tensor = lower_tensor.view(shape[0], shape[2], -1, *lower_dim_shape)
+        lower_conv_tensor = lower_tensor.reshape(shape[0], shape[2], -1, *lower_dim_shape)
 
         # Create a list from 0 to n dimensions
         # The list should go batch, highest dimension, channels, lower dimensions
@@ -131,7 +131,7 @@ class ConvNd(nn.Module):
         high_dim_size = down_output_size(
             shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding, dilation=self.dilation
         )
-        final_tensor = one_dim_conv_tensor.view(shape[0], *lower_dim_shape, self.out_channels, high_dim_size)
+        final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, self.out_channels, high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
         return final_tensor
 
@@ -209,7 +209,7 @@ class ConvTransposeNd(nn.Module):
         lower_dim_shape = shape[-self.dimensions + 1:]
 
         # Adjust the view to merge the batch and highest dimension, then the channels, then the lower dimensions
-        lower_tensor = nd_tensor.view(shape[0] * shape[2], shape[1], *lower_dim_shape)
+        lower_tensor = nd_tensor.reshape(shape[0] * shape[2], shape[1], *lower_dim_shape)
 
         # Work the lower dimension
         lower_tensor = getattr(self, self.lower_name)(lower_tensor)
@@ -221,7 +221,7 @@ class ConvTransposeNd(nn.Module):
         ]
 
         # Change everything back
-        lower_conv_tensor = lower_tensor.view(shape[0], shape[2], -1, *lower_dim_shape)
+        lower_conv_tensor = lower_tensor.reshape(shape[0], shape[2], -1, *lower_dim_shape)
 
         # Create a list from 0 to n dimensions
         # The list should go batch, highest dimension, channels, lower dimensions
@@ -246,7 +246,7 @@ class ConvTransposeNd(nn.Module):
             shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding,
             dilation=self.dilation, output_padding=self.output_padding
         )
-        final_tensor = one_dim_conv_tensor.view(shape[0], *lower_dim_shape, self.out_channels, high_dim_size)
+        final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, self.out_channels, high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
         return final_tensor
 
@@ -267,17 +267,16 @@ class BatchNormNd(nn.Module):
         shape = list(nd_tensor.shape)
 
         # Reduce shape to one dimension
-        nd_tensor = nd_tensor.view(shape[0], shape[1], -1)
+        nd_tensor = nd_tensor.reshape(shape[0], shape[1], -1)
 
         # Conduct 1D Batch Normalization
         norm_tensor = self.norm(nd_tensor)
 
         # Change everything back
-        norm_tensor = norm_tensor.view(*shape)
+        norm_tensor = norm_tensor.reshape(*shape)
         return norm_tensor
 
 
-# TODO: Add tuple support for parameters
 class MaxPoolNd(nn.Module):
     def __init__(self, dimensions, kernel_size, strides, padding, dilation):
         super().__init__()
@@ -336,7 +335,7 @@ class MaxPoolNd(nn.Module):
         lower_dim_shape = shape[-self.dimensions + 1:]
 
         # Adjust the view to merge the batch and highest dimension, then the channels, then the lower dimensions
-        lower_tensor = nd_tensor.view(shape[0] * shape[2], shape[1], *lower_dim_shape)
+        lower_tensor = nd_tensor.reshape(shape[0] * shape[2], shape[1], *lower_dim_shape)
 
         # Work the lower dimension
         lower_tensor = getattr(self, self.lower_name)(lower_tensor)
@@ -348,7 +347,7 @@ class MaxPoolNd(nn.Module):
         ]
 
         # Change everything back
-        lower_conv_tensor = lower_tensor.view(shape[0], shape[2], -1, *lower_dim_shape)
+        lower_conv_tensor = lower_tensor.reshape(shape[0], shape[2], -1, *lower_dim_shape)
 
         # Create a list from 0 to n dimensions
         # The list should go batch, highest dimension, channels, lower dimensions
@@ -372,12 +371,11 @@ class MaxPoolNd(nn.Module):
         high_dim_size = down_output_size(
             shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding, dilation=self.dilation
         )
-        final_tensor = one_dim_conv_tensor.view(shape[0], *lower_dim_shape, shape[1], high_dim_size)
+        final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, shape[1], high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
         return final_tensor
 
 
-# TODO: Add tuple support for parameters
 class AvgPoolNd(nn.Module):
     def __init__(self, dimensions, kernel_size, strides, padding):
         super().__init__()
@@ -430,7 +428,7 @@ class AvgPoolNd(nn.Module):
         lower_dim_shape = shape[-self.dimensions + 1:]
 
         # Adjust the view to merge the batch and highest dimension, then the channels, then the lower dimensions
-        lower_tensor = nd_tensor.view(shape[0] * shape[2], shape[1], *lower_dim_shape)
+        lower_tensor = nd_tensor.reshape(shape[0] * shape[2], shape[1], *lower_dim_shape)
 
         # Work the lower dimension
         lower_tensor = getattr(self, self.lower_name)(lower_tensor)
@@ -442,7 +440,7 @@ class AvgPoolNd(nn.Module):
         ]
 
         # Change everything back
-        lower_conv_tensor = lower_tensor.view(shape[0], shape[2], -1, *lower_dim_shape)
+        lower_conv_tensor = lower_tensor.reshape(shape[0], shape[2], -1, *lower_dim_shape)
 
         # Create a list from 0 to n dimensions
         # The list should go batch, highest dimension, channels, lower dimensions
@@ -466,7 +464,7 @@ class AvgPoolNd(nn.Module):
         high_dim_size = avg_output_size(
             shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding
         )
-        final_tensor = one_dim_conv_tensor.view(shape[0], *lower_dim_shape, shape[1], high_dim_size)
+        final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, shape[1], high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
         return final_tensor
 
