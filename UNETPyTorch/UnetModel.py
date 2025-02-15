@@ -14,6 +14,10 @@ from UnetThreeDim import UNETThree
 from UnetNDim import UNETNth
 
 
+def assert_ascending(lst):
+    return all(lst[i] <= lst[i + 1] for i in range(len(lst) - 1))
+
+
 # Model based on DeepFind's "Diffusion models from scratch in PyTorch" video using my dynamic UNET as a base.
 class DiffusionUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
@@ -26,6 +30,9 @@ class DiffusionUNETModel:
         )
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
+        )
+        assert assert_ascending(conv_channels), (
+            "channel_list must be in ascending order, from least amount of encodings to most."
         )
         assert issubclass(out_layer, nn.Module), (
             "out_layer must be a subclass of nn.Module."
@@ -249,6 +256,9 @@ class GeneralUNETModel:
         )
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
+        )
+        assert assert_ascending(conv_channels), (
+            "channel_list must be in ascending order, from least amount of encodings to most."
         )
         assert issubclass(out_layer, nn.Module), (
             "out_layer must be a subclass of nn.Module."

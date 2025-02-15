@@ -34,7 +34,37 @@ Now I'm just improving the functionality and adding onto everything, so I can wr
 From my understanding, a UNET is an encoder-decoder model that utilizes skip connections between the encoder and
 decoder parts of the network. An image is shown below showing the visuals of a basic UNET.
 
-![Basic UNET Architecture](readme_resources/UNET Basic.png)
+![Basic UNET Architecture](./readme_resources/unet_basic.png)
+
+The UNET uses convolutional layers and pooling layers to reduce the spatial dimensions of the data while increasing
+the channels of the data, with the purpose being that important information can be gradually extracted as the data
+progresses through the encoder. The bottom of the encoder is the bottleneck - the deepest encoding that can be done.
+
+Once the bottleneck is reached, special outputs called _skip connections_ are fed into the decoder portion of the model,
+along with upscaled encodings from the encoder. Combining the skip connections and the up-scaled encodings allows for
+short-term and long-term information to be used in a nuanced manner.
+
+Each phase of the encoding and decoding is largely defined by the amount of filter channels that are used through
+convolution and convolution transpose operations. Levels of channels that are encoded into the model must be used in
+reverse order to decode, resulting in a "U"-like architecture.
+
+From there, additional operations can be added to the model to further enhance the results, such as attention and 
+residual connections.
+
+# Understanding the Code
+
+I take advantage of the symmetrical model to generate the UNET as a set of downsampling and upsampling blocks, with
+a bottleneck module in the middle of both. Each downsampling block represents the convolution and pooling operations,
+and each upsampling block represents the deconvolution and unpooling operations. Both are configured with boolean
+parameters that enable more operations such as ReLU activation, along with larger modules like an Attention block.
+
+A large amount of the code is split by dimension, so I have dedicated modules for a 1D, 2D, 3D, and ND UNET, where "N"
+represents a larger number of dimensions whose operations can be derived through recursive 3D operations. However,
+for ML analysis you would only interact with the UnetModel module, which holds wrapper UNET classes that have 
+functionality for training and saving progress and the best UNET models at each epoch. Right now, there is a general 
+wrapper for normal learning, and a diffusion wrapper for denoising diffusion.
+
+The Testing python files are just examples I used to test the functionality of the UNETs.
 
 # Google Colab Link
 
@@ -47,5 +77,5 @@ After I found out about the limited runtime, I had to create my own local enviro
 pytorch has resources on how to download the necessary stuff. https://pytorch.org/get-started/locally/
 
 My suggestion is to pick a drive with a decent amount of space you can play around and create a virtual environment,
-and when you are installing, pick a place with a good connection. The stuff in my requirements folder took up around
-2.5GB of space.
+and when you are installing, pick a place with a good connection. The cuda-enabled pytorch installation took up around
+2.5GB of space. I have a requirements.txt file that shows the names of the packages I used for this project.
