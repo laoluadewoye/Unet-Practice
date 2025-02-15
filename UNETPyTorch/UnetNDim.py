@@ -151,7 +151,7 @@ class UpSampleN(nn.Module):
         super().__init__()
 
         # 2x2 Upscale with channel shrinkage
-        self.upscaler = ConvTransposeNd(dimensions, in_channels, out_channels, kernel_size=2, stride=2)
+        self.upscaler = ConvTransposeNd(dimensions, in_channels, out_channels, kernel_size=2, strides=2)
 
         # Attention block but only if needed
         self.need_attention = use_attention
