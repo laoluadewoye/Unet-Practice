@@ -5,7 +5,7 @@ https://www.youtube.com/watch?v=a4Yfz2FxXiY
 
 Thank you to FernandoPC25 for the article on UNETs and inspiring my dynamic architecture - https://medium.com/@fernandopalominocobo/mastering-u-net-a-step-by-step-guide-to-segmentation-from-scratch-with-pytorch-6a17c5916114
 
-Thank you to PvJosue for trying this before me - https://github.com/pvjosue/pytorch_convNd/blob/master/LICENSE
+Thank you to PvJosue for trying to make recursive convolution before me - https://github.com/pvjosue/pytorch_convNd/blob/master/LICENSE
 
 # Welcome
 
@@ -23,8 +23,18 @@ beefed up the model with some batch modularization, activation functions, and ad
 stuff through optional parameters. Lastly, I added the ability to use time embeddings and created a diffusion "shell"
 model that can sit around the UNET to handle all the denoising steps for a complete diffusion model.
 
-I am still working on adding more and more to it, and currently it is kind of a trash image generator, but the more 
-options I add to it, the more customizable I can make everything at the click of a button which is nice.
+Lastly, I pulled from existing resources, and creating a model that could handle any number of dimensions. After
+figuring out convolution, I took out a whiteboard and marker and worked out how the rest of the dimension-specific
+operations would work, and I think I got everything figured out.
+
+Now I'm just improving the functionality and adding onto everything, so I can write a section on how everything works
+
+# How the UNET System works
+
+From my understanding, a UNET is an encoder-decoder model that utilizes skip connections between the encoder and
+decoder parts of the network. An image is shown below showing the visuals of a basic UNET.
+
+![Basic UNET Architecture](readme_resources/UNET Basic.png)
 
 # Google Colab Link
 
