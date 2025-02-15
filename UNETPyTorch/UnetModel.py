@@ -330,30 +330,3 @@ class GeneralUNETModel:
         results_df.to_csv(f"{result_folder}/{self.model_name}_training_results.csv", index=False)
 
         return results_df
-
-
-def two_dim_unet():
-    # Dimensions
-    dimensions = 2
-
-    # Channels (i.e. RGB, Grayscale)
-    channels = 3
-
-    # Filter list
-    conv_filters = [64, 128, 256, 512, 1024]
-
-    # The output classes
-    num_classes = 10
-    my_out_layer = nn.Conv2d(in_channels=conv_filters[0], out_channels=num_classes, kernel_size=1)
-
-    # Create sample model
-    default_model = GeneralUNETModel(
-        'default', dimensions, channels, conv_filters, my_out_layer,
-        True, True, True, 0.001
-    )
-    print(default_model)
-    print(f"Parameter Count: {default_model.param_count:,}")
-
-
-if __name__ == "__main__":
-    two_dim_unet()

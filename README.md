@@ -1,3 +1,12 @@
+# Major Credits
+
+Thank you to DeepFindr for the video on creating a relatively simple diffusion model in PyTorch. 
+https://www.youtube.com/watch?v=a4Yfz2FxXiY
+
+Thank you to FernandoPC25 for the article on UNETs and inspiring my dynamic architecture - https://medium.com/@fernandopalominocobo/mastering-u-net-a-step-by-step-guide-to-segmentation-from-scratch-with-pytorch-6a17c5916114
+
+Thank you to PvJosue for trying this before me - https://github.com/pvjosue/pytorch_convNd/blob/master/LICENSE
+
 # Welcome
 
 This is some practice I did with creating a dynamic UNET architecture model. It started when I wanted to learn stable

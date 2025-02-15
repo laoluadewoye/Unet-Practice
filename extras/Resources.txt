@@ -1,5 +1,7 @@
-UNET - https://medium.com/towards-data-science/a-detailed-explanation-of-the-attention-u-net-b371a5590831
+UNET - https://medium.com/@fernandopalominocobo/mastering-u-net-a-step-by-step-guide-to-segmentation-from-scratch-with-pytorch-6a17c5916114
+UNET Attention - https://medium.com/towards-data-science/a-detailed-explanation-of-the-attention-u-net-b371a5590831
 Attention - https://www.youtube.com/watch?v=zxQyTK8quyY
 Attention Modules using Pooling - https://www.researchgate.net/publication/365679632_A_Semi-Supervised_Object_Detection_Algorithm_Based_on_Teacher-Student_Models_with_Strong-Weak_Heads
 Simple Diffusion - https://github.com/filipbasara0/simple-diffusion/blob/main/simple_diffusion/model/unet.py
 Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
+N-Dimensional Convolution - https://github.com/pvjosue/pytorch_convNd/blob/master/LICENSE
