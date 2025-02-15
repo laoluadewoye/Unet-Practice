@@ -106,20 +106,20 @@ class AttentionThree(nn.Module):
 
         # Perform 1x1 convolution on decoder channels
         self.decoder_conv = nn.Sequential(
-            nn.Conv3d(dec_skip_channels, inter_channels, 1),
+            nn.Conv3d(dec_skip_channels, inter_channels, kernel_size=1),
             nn.BatchNorm3d(inter_channels),
         )
 
         # Perform 1x1 convolution on skip connections
         self.skip_conv = nn.Sequential(
-            nn.Conv3d(dec_skip_channels, inter_channels, 1),
+            nn.Conv3d(dec_skip_channels, inter_channels, kernel_size=1),
             nn.BatchNorm3d(inter_channels),
         )
 
         # Create an attention mask
         self.masker = nn.Sequential(
-            nn.Conv3d(inter_channels, 1, 1),
-            nn.BatchNorm3d(1),
+            nn.Conv3d(inter_channels, out_channels=1, kernel_size=1),
+            nn.BatchNorm3d(num_features=1),
             nn.Sigmoid()
         )
 
