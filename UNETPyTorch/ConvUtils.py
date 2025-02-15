@@ -10,6 +10,7 @@ def up_output_size(input_size, kernel_size, stride=1, padding=0, dilation=1, out
     return (input_size - 1) * stride - 2 * padding + dilation * (kernel_size - 1) + output_padding + 1
 
 
+# TODO: Add tuple support for parameters
 # Simplified version of ConvNd using this as a guide: https://github.com/pvjosue/pytorch_convNd/blob/master/convNd.py
 class ConvNd(nn.Module):
     def __init__(self, dimensions, in_channels, out_channels, kernel_size, strides=1, padding=0):
@@ -135,7 +136,7 @@ class ConvTransposeNd(nn.Module):
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.ConvTranspose1d(
-            in_channels=self.in_channels, out_channels=self.out_channels,
+            in_channels=self.out_channels, out_channels=self.out_channels,
             kernel_size=self.kernel_size, stride=self.strides, padding=self.padding
         )
 
@@ -209,6 +210,7 @@ class BatchNormNd(nn.Module):
         return norm_tensor
 
 
+# TODO: Add tuple support for parameters
 class MaxPoolNd(nn.Module):
     def __init__(self, dimensions, kernel_size, stride, padding=0):
         super().__init__()
@@ -290,6 +292,7 @@ class MaxPoolNd(nn.Module):
         return final_tensor
 
 
+# TODO: Add tuple support for parameters
 class AvgPoolNd(nn.Module):
     def __init__(self, dimensions, kernel_size, stride, padding=0):
         super().__init__()

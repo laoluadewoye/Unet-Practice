@@ -249,3 +249,18 @@ class UNETNth(nn.Module):
 
         # Apply custom output layer and return
         return self.out_layer(cur_up)
+
+
+if __name__ == '__main__':
+    # Create 4D Tensor
+    batch = torch.randn((1, 3, 16, 64, 64, 64))
+    print(batch.shape)
+    batch = batch.to("cuda")
+
+    # Create 4D UNET
+    model = UNETNth(dimensions=4, in_channels=3, channel_list=[64, 128, 256], out_layer=nn.Identity())
+    model = model.to("cuda")
+
+    # Run forward pass
+    out = model(batch).to("cpu")
+    print(out.shape)
