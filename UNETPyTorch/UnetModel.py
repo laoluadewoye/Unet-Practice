@@ -20,8 +20,15 @@ class DiffusionUNETModel:
                  use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002, time_steps=300,
                  time_embed_count=32):
 
+        # Assertion list
+        assert in_dimensions > 0, (
+            "in_dimensions must be greater than 0."
+        )
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
+        )
+        assert issubclass(out_layer, nn.Module), (
+            "out_layer must be a subclass of nn.Module."
         )
 
         # Basic model information
@@ -236,8 +243,15 @@ class GeneralUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
                  use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002):
 
+        # Assertion list
+        assert in_dimensions > 0, (
+            "in_dimensions must be greater than 0."
+        )
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
+        )
+        assert issubclass(out_layer, nn.Module), (
+            "out_layer must be a subclass of nn.Module."
         )
 
         self.model_name = name
