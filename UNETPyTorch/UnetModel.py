@@ -1,5 +1,6 @@
 import torch
 import os
+import shutil
 import numpy as np
 import pandas as pd
 import torch.nn as nn
@@ -8,10 +9,10 @@ from torch.optim import Adam
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
-from UnetOneDim import UNETOne
-from UnetTwoDim import UNETTwo
-from UnetThreeDim import UNETThree
-from UnetNDim import UNETNth
+from .UnetOneDim import UNETOne
+from .UnetTwoDim import UNETTwo
+from .UnetThreeDim import UNETThree
+from .UnetNDim import UNETNth
 
 
 def assert_ascending(lst):
@@ -25,18 +26,15 @@ class DiffusionUNETModel:
                  time_embed_count=32):
 
         # Assertion list
-        assert in_dimensions > 0, (
-            "in_dimensions must be greater than 0."
-        )
+        assert in_dimensions > 0, "in_dimensions must be greater than 0."
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
         )
         assert assert_ascending(conv_channels), (
             "channel_list must be in ascending order, from least amount of encodings to most."
         )
-        assert issubclass(out_layer, nn.Module), (
-            "out_layer must be a subclass of nn.Module."
-        )
+        assert isinstance(out_layer, nn.Module), "out_layer must be an instance of nn.Module."
+
 
         # Basic model information
         self.model_name = name
@@ -181,8 +179,9 @@ class DiffusionUNETModel:
     def train_model(self, train_loader, epochs, print_interval, batch_size, sample_img_size) -> pd.DataFrame:
         # Create training output folder if needed
         result_folder = f"training_output/{self.model_name}"
-        if not os.path.exists(result_folder):
-            os.makedirs(result_folder)
+        if os.path.exists(result_folder):
+            shutil.rmtree(result_folder)
+        os.makedirs(result_folder)
 
         # Create dictionary to save results
         results = {"epoch": [], "batch": [], "loss": []}
@@ -251,18 +250,14 @@ class GeneralUNETModel:
                  use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002):
 
         # Assertion list
-        assert in_dimensions > 0, (
-            "in_dimensions must be greater than 0."
-        )
+        assert in_dimensions > 0, "in_dimensions must be greater than 0."
         assert len(conv_channels) > 1, (
             "channel_list must have at least two elements for down sampling and bottleneck."
         )
         assert assert_ascending(conv_channels), (
             "channel_list must be in ascending order, from least amount of encodings to most."
         )
-        assert issubclass(out_layer, nn.Module), (
-            "out_layer must be a subclass of nn.Module."
-        )
+        assert isinstance(out_layer, nn.Module), "out_layer must be an instance of nn.Module."
 
         self.model_name = name
         self.dim_count = in_dimensions
@@ -300,8 +295,9 @@ class GeneralUNETModel:
     def train_model(self, train_loader, epochs, loss_func, print_interval) -> pd.DataFrame:
         # Create training output folder if needed
         result_folder = f"training_output/{self.model_name}"
-        if not os.path.exists(result_folder):
-            os.makedirs(result_folder)
+        if os.path.exists(result_folder):
+            shutil.rmtree(result_folder)
+        os.makedirs(result_folder)
 
         # Create dictionary to save results
         results = {"epoch": [], "batch": [], "loss": []}

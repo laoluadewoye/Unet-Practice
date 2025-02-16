@@ -65,17 +65,3 @@ functionality for training and saving progress and the best UNET models at each 
 wrapper for normal learning, and a diffusion wrapper for denoising diffusion.
 
 The Testing python files are just examples I used to test the functionality of the UNETs.
-
-# Google Colab Link
-
-You can use GPUs for free as of February 2025, but it has a limited runtime. You can just copy my stuff into your own 
-notebook if you want. There is also a requirements folder to timestamp what library versions I use.
-
-https://colab.research.google.com/drive/1lOn-XvXf3O6jaqZSc4LVkkmBC5E6EHf7?usp=sharing
-
-After I found out about the limited runtime, I had to create my own local environment. I have an nvidia drive, and
-pytorch has resources on how to download the necessary stuff. https://pytorch.org/get-started/locally/
-
-My suggestion is to pick a drive with a decent amount of space you can play around and create a virtual environment,
-and when you are installing, pick a place with a good connection. The cuda-enabled pytorch installation took up around
-2.5GB of space. I have a requirements.txt file that shows the names of the packages I used for this project.

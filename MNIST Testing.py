@@ -67,3 +67,4 @@ loss_module = nn.CrossEntropyLoss()
 model_train_stats = mnist_model.train_model(
     train_loader=train_loader, epochs=epoch_count, loss_func=loss_module, print_interval=print_interval
 )
+print(model_train_stats)

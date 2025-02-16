@@ -70,3 +70,5 @@ if __name__ == '__main__':
         train_loader=dataloader, epochs=epoch_count, print_interval=print_interval,
         batch_size=BATCH_SIZE, sample_img_size=IMG_SIZE
     )
+
+    print(model_train_stats)
