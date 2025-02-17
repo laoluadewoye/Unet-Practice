@@ -1,7 +1,10 @@
 import torch
 import math
+import copy
 import torch.nn as nn
-from .ConvUtils import *
+import torch.nn.functional as F
+from torchinfo import summary
+from ConvUtils import *
 
 
 # Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
@@ -22,19 +25,20 @@ class DiffusionSinPosEmbeds(nn.Module):
 
 
 class DoubleConvN(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, use_time=False, time_embed_count=0,
-                 use_bnorm=False, use_relu=False):
+    def __init__(self, dimensions, in_channels, out_channels, dconv_act_fn=None, use_time=False, time_embed_count=0,
+                 use_res=False):
         super().__init__()
 
+        # Set activation function
+        dconv_act_fn_one = copy.deepcopy(dconv_act_fn) if dconv_act_fn is not None else nn.ReLU(inplace=True)
+        dconv_act_fn_two = copy.deepcopy(dconv_act_fn) if dconv_act_fn is not None else nn.ReLU(inplace=True)
+
         # First Convolution + Batch Norm and ReLU options
-        first_conv_list = [
-            ConvNd(dimensions, in_channels, out_channels, kernel_size=3, strides=1, padding=1, dilation=1)
-        ]
-        if use_bnorm:
-            first_conv_list.append(BatchNormNd(dimensions, out_channels))
-        if use_relu:
-            first_conv_list.append(nn.ReLU(inplace=True))
-        self.first_conv = nn.Sequential(*first_conv_list)
+        self.first_conv = nn.Sequential(
+            ConvNd(dimensions, in_channels, out_channels, kernel_size=3, strides=1, padding=1, dilation=1),
+            BatchNormNd(dimensions, out_channels),
+            dconv_act_fn_one
+        )
 
         # Optional time modification
         self.need_time = use_time
@@ -47,20 +51,28 @@ class DoubleConvN(nn.Module):
             self.embed_adjuster = None
 
         # Second Convolution + Batch Norm and ReLU options
-        sec_conv_list = [
-            ConvNd(dimensions, out_channels, out_channels, kernel_size=3, strides=1, padding=1, dilation=1)
-        ]
-        if use_bnorm:
-            sec_conv_list.append(BatchNormNd(dimensions, out_channels))
-        if use_relu:
-            sec_conv_list.append(nn.ReLU(inplace=True))
-        self.sec_conv = nn.Sequential(*sec_conv_list)
+        self.sec_conv = nn.Sequential(
+            ConvNd(dimensions, out_channels, out_channels, kernel_size=3, strides=1, padding=1, dilation=1),
+            BatchNormNd(dimensions, out_channels),
+            dconv_act_fn_two
+        )
+
+        # Optional residual modification
+        self.need_res = use_res
+        if self.need_res:
+            self.res_match = ConvNd(
+                dimensions, in_channels, out_channels, kernel_size=1, strides=1, padding=0, dilation=1
+            )
+            self.res_act = nn.ReLU(inplace=True)
+        else:
+            self.res_match = None
+            self.res_act = None
 
         self.dimensions = dimensions
 
     def forward(self, batch, time_embed=None):
         # Do first convolution set
-        batch = self.first_conv(batch)
+        conv_batch = self.first_conv(batch)
 
         # Create time embedding if needed
         if self.need_time:
@@ -77,22 +89,28 @@ class DoubleConvN(nn.Module):
             adjusted_time_embed = adjusted_time_embed[(...,) + (None,) * self.dimensions]
 
             # Adds time-sensitive embeddings to batch
-            batch = batch + adjusted_time_embed
+            conv_batch = conv_batch + adjusted_time_embed
 
         # Do second convolution set
-        batch = self.sec_conv(batch)
-        return batch
+        conv_batch = self.sec_conv(conv_batch)
+
+        # Add residuals if needed
+        if self.need_res:
+            res_batch = self.res_match(batch)
+            conv_batch = self.res_act(conv_batch + res_batch)
+
+        return conv_batch
 
 
 class DownSampleN(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, dconv_time=False, time_embed_count=0,
-                 dconv_bnorm=False, dconv_relu=False):
+    def __init__(self, dimensions, in_channels, out_channels, dconv_act_fn=None, dconv_time=False, time_embed_count=0,
+                 dconv_res=False):
         super().__init__()
 
         # Double Convolution Step
         self.conv = DoubleConvN(
-            dimensions, in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
-            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            dimensions, in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
+            time_embed_count=time_embed_count, use_res=dconv_res
         )
 
         # 2x2 Max Pooling to Shrink image
@@ -109,7 +127,7 @@ class DownSampleN(nn.Module):
 
 
 class AttentionN(nn.Module):
-    def __init__(self, dimensions, dec_skip_channels, inter_channels):
+    def __init__(self, dimensions, dec_skip_channels, inter_channels, use_pool=False):
         super().__init__()
 
         # Perform 1x1 convolution on decoder channels
@@ -124,6 +142,17 @@ class AttentionN(nn.Module):
             BatchNormNd(dimensions, inter_channels),
         )
 
+        # Create pooling layers for skip connections if needed
+        self.need_pool = use_pool
+        if self.need_pool:
+            self.max_pool = MaxPoolNd(dimensions, kernel_size=2, strides=1, padding=0, dilation=1)
+            self.avg_pool = AvgPoolNd(dimensions, kernel_size=2, strides=1, padding=0)
+            self.pool_interpolate = InterpolateNd(dimensions)
+        else:
+            self.max_pool = None
+            self.avg_pool = None
+            self.pool_interpolate = None
+
         # Create an attention mask
         self.masker = nn.Sequential(
             ConvNd(dimensions, inter_channels, out_channels=1, kernel_size=1, strides=1, padding=0, dilation=1),
@@ -131,8 +160,10 @@ class AttentionN(nn.Module):
             nn.Sigmoid()
         )
 
-        # Activation function for Spatial Attention Block
-        self.activation = nn.ReLU(inplace=True)
+        # ReLU Activation function for Spatial Attention Block
+        self.relu = nn.ReLU(inplace=True)
+
+        self.dimensions = dimensions
 
     def forward(self, decoder, skip):
         # Create an intermediate decoder representation
@@ -141,8 +172,14 @@ class AttentionN(nn.Module):
         # Create an intermediate skip representation
         skip_int = self.skip_conv(skip)
 
+        # Apply pooling operations if needed
+        if self.need_pool:
+            skip_max = self.max_pool(skip_int)
+            skip_avg = self.avg_pool(skip_int)
+            skip_int = self.pool_interpolate(skip_max + skip_avg, size=skip_int.shape[-self.dimensions:])
+
         # Add together then apply activation to keep only noticeable features from both representations
-        combo_int = self.activation(decoder_int + skip_int)
+        combo_int = self.relu(decoder_int + skip_int)
 
         # Create a normalized attention mask to specify where to pay "attention" to
         masked_int = self.masker(combo_int)
@@ -152,26 +189,34 @@ class AttentionN(nn.Module):
 
 
 class UpSampleN(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, use_attention=False, dconv_time=False,
-                 time_embed_count=0, dconv_bnorm=False, dconv_relu=False):
+    def __init__(self, dimensions, in_channels, out_channels, up_drop_perc=0.3, use_attention=False, attn_pool=False,
+                 dconv_act_fn=None, dconv_time=False, time_embed_count=0, dconv_res=False):
         super().__init__()
 
         # 2x2 Upscale with channel shrinkage
-        self.upscaler = ConvTransposeNd(
-            dimensions, in_channels, out_channels, kernel_size=2, strides=2, padding=0, dilation=1, output_padding=0
-        )
+        self.upscaler = [
+            ConvTransposeNd(
+                dimensions, in_channels, out_channels, kernel_size=2, strides=2,
+                padding=0, dilation=1, output_padding=0
+            ),
+            BatchNormNd(dimensions, out_channels),
+            nn.ReLU(inplace=True)
+        ]
+        if up_drop_perc > 0:
+            self.upscaler.append(nn.Dropout(up_drop_perc))
+        self.upscaler = nn.Sequential(*self.upscaler)
 
         # Attention block but only if needed
         self.need_attention = use_attention
         if self.need_attention:
-            self.attention = AttentionN(dimensions, in_channels // 2, out_channels // 2)
+            self.attention = AttentionN(dimensions, in_channels // 2, out_channels // 2, use_pool=attn_pool)
         else:
             self.attention = None
 
         # Double Convolution Step (assumes skip connection is present to combine long and short paths)
         self.conv = DoubleConvN(
-            dimensions, in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
-            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            dimensions, in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
+            time_embed_count=time_embed_count, use_res=dconv_res
         )
 
     def forward(self, cur, skip, time_embed=None):
@@ -189,7 +234,7 @@ class UpSampleN(nn.Module):
 
 class UNETNth(nn.Module):
     def __init__(self, dimensions, in_channels, channel_list, out_layer, denoise_diff=False, denoise_embed_count=0,
-                 up_attention=False, dconv_bnorm=False, dconv_relu=False):
+                 up_attention=False, attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, dconv_res=False):
         super().__init__()
 
         # Create Sinusoidal Time Embedding
@@ -206,15 +251,15 @@ class UNETNth(nn.Module):
         for i in range(len(channel_list) - 1):
             cur_in_channels = in_channels if i == 0 else channel_list[i - 1]
             down_smap.append(DownSampleN(
-                dimensions, cur_in_channels, channel_list[i], dconv_time=self.need_denoise,
-                time_embed_count=denoise_embed_count, dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+                dimensions, cur_in_channels, channel_list[i], dconv_act_fn=dconv_act_fn, dconv_time=self.need_denoise,
+                time_embed_count=denoise_embed_count, dconv_res=dconv_res
             ))
         self.down_samplers = nn.ModuleList(down_smap)
 
         # Create bottleneck transition
         self.bottle_neck = DoubleConvN(
-            dimensions, channel_list[-2], channel_list[-1], use_time=self.need_denoise,
-            time_embed_count=denoise_embed_count, use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            dimensions, channel_list[-2], channel_list[-1], dconv_act_fn=dconv_act_fn, use_time=self.need_denoise,
+            time_embed_count=denoise_embed_count, use_res=dconv_res
         )
 
         # Create up samplers using nn.ModuleList
@@ -222,9 +267,9 @@ class UNETNth(nn.Module):
         for i in range(len(channel_list) - 1, 0, -1):
             cur_attention = up_attention and i > 1
             up_samp.append(UpSampleN(
-                dimensions, channel_list[i], channel_list[i - 1], use_attention=cur_attention,
-                dconv_time=self.need_denoise, time_embed_count=denoise_embed_count,
-                dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+                dimensions, channel_list[i], channel_list[i - 1], up_drop_perc=up_drop_perc,
+                use_attention=cur_attention, attn_pool=attn_pool, dconv_act_fn=dconv_act_fn,
+                dconv_time=self.need_denoise, time_embed_count=denoise_embed_count, dconv_res=dconv_res
             ))
         self.up_samplers = nn.ModuleList(up_samp)
 
@@ -260,13 +305,10 @@ class UNETNth(nn.Module):
 
 
 if __name__ == '__main__':
-    # Create 5D UNETs
-    basic_model = UNETNth(
-        dimensions=5, in_channels=3, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Identity()
-    )
-    full_model = UNETNth(
-        dimensions=5, in_channels=3, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Identity(), denoise_diff=True,
-        denoise_embed_count=32, up_attention=True, dconv_bnorm=True, dconv_relu=True
-    )
-    print(f"{sum(p.numel() for p in basic_model.parameters()):,} total parameters in Base 5D 5-layer UNET")
-    print(f"{sum(p.numel() for p in full_model.parameters()):,} total parameters in Full 5D 5-layer UNET")
+    model = UNETNth(
+        dimensions=5, in_channels=1, channel_list=[64, 128, 256], out_layer=nn.Sigmoid(),
+        up_attention=True, attn_pool=True, up_drop_perc=0.5,
+        dconv_act_fn=nn.LeakyReLU(0.2, inplace=True), dconv_res=True
+    ).to("cuda")
+    print(model)
+    summary(model, input_size=(1, 1, 8, 8, 8, 8, 8), depth=10)

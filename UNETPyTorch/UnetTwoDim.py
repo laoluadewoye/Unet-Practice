@@ -192,7 +192,7 @@ class UpSampleTwo(nn.Module):
             nn.ReLU(inplace=True),
         ]
         if up_drop_perc > 0:
-            upscaler.append(nn.Dropout2d(up_drop_perc))
+            upscaler.append(nn.Dropout(up_drop_perc))
         self.upscaler = nn.Sequential(*upscaler)
 
         # Attention block but only if needed
