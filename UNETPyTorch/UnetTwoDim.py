@@ -22,17 +22,19 @@ class DiffusionSinPosEmbeds(nn.Module):
 
 # TODO: Update uses of DoubleConvTwo
 class DoubleConvTwo(nn.Module):
-    def __init__(self, in_channels, out_channels, use_time=False, time_embed_count=0, use_res=False,
-                 use_bnorm=False, use_relu=False):
+    def __init__(self, in_channels, out_channels, dconv_act_fn=None, use_time=False, time_embed_count=0, use_res=False):
         super().__init__()
 
+        # Set activation function
+        dconv_act_fn_one = dconv_act_fn if dconv_act_fn is not None else nn.ReLU(inplace=True)
+        dconv_act_fn_two = dconv_act_fn if dconv_act_fn is not None else nn.ReLU(inplace=True)
+
         # First Convolution + Batch Norm and ReLU options
-        first_conv_list = [nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)]
-        if use_bnorm:
-            first_conv_list.append(nn.BatchNorm2d(out_channels))
-        if use_relu:
-            first_conv_list.append(nn.ReLU(inplace=True))
-        self.first_conv = nn.Sequential(*first_conv_list)
+        self.first_conv = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            dconv_act_fn_one
+        )
 
         # Optional time modification
         self.need_time = use_time
@@ -45,12 +47,11 @@ class DoubleConvTwo(nn.Module):
             self.embed_adjuster = None
 
         # Second Convolution + Batch Norm and ReLU options
-        sec_conv_list = [nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)]
-        if use_bnorm:
-            sec_conv_list.append(nn.BatchNorm2d(out_channels))
-        if use_relu:
-            sec_conv_list.append(nn.ReLU(inplace=True))
-        self.sec_conv = nn.Sequential(*sec_conv_list)
+        self.sec_conv = nn.Sequential(
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            dconv_act_fn_two
+        )
 
         # Optional residual modification
         self.need_res = use_res
@@ -94,14 +95,14 @@ class DoubleConvTwo(nn.Module):
 
 
 class DownSampleTwo(nn.Module):
-    def __init__(self, in_channels, out_channels, dconv_time=False, time_embed_count=0, dconv_res=False,
-                 dconv_bnorm=False, dconv_relu=False):
+    def __init__(self, in_channels, out_channels, dconv_act_fn=None, dconv_time=False, time_embed_count=0,
+                 dconv_res=False):
         super().__init__()
 
         # Double Convolution Step
         self.conv = DoubleConvTwo(
-            in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
-            use_res=dconv_res, use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
+            time_embed_count=time_embed_count, use_res=dconv_res
         )
 
         # 2x2 Max Pooling to Shrink image
@@ -177,12 +178,19 @@ class AttentionTwo(nn.Module):
 
 # TODO: Add Dropout
 class UpSampleTwo(nn.Module):
-    def __init__(self, in_channels, out_channels, use_attention=False, attn_pool=False, dconv_time=False,
-                 time_embed_count=0, dconv_res=False, dconv_bnorm=False, dconv_relu=False):
+    def __init__(self, in_channels, out_channels, up_drop_perc=0.3, use_attention=False, attn_pool=False,
+                 dconv_act_fn=None, dconv_time=False, time_embed_count=0, dconv_res=False):
         super().__init__()
 
-        # 2x2 Upscale with channel shrinkage
-        self.upscaler = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        # 2x2 Upscale with channel shrinkage, plus normalization, relu activation, and dropouts
+        upscaler = [
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+        ]
+        if up_drop_perc > 0:
+            upscaler.append(nn.Dropout2d(up_drop_perc))
+        self.upscaler = nn.Sequential(*upscaler)
 
         # Attention block but only if needed
         self.need_attention = use_attention
@@ -193,8 +201,8 @@ class UpSampleTwo(nn.Module):
 
         # Double Convolution Step (assumes skip connection is present to combine long and short paths)
         self.conv = DoubleConvTwo(
-            in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
-            use_res=dconv_res, use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
+            time_embed_count=time_embed_count, use_res=dconv_res
         )
 
     def forward(self, cur, skip, time_embed=None):
@@ -212,7 +220,7 @@ class UpSampleTwo(nn.Module):
 
 class UNETTwo(nn.Module):
     def __init__(self, in_channels, channel_list, out_layer, denoise_diff=False, denoise_embed_count=0,
-                 up_attention=False, attn_pool=False, dconv_res=False, dconv_bnorm=False, dconv_relu=False):
+                 up_attention=False, attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, dconv_res=False):
         super().__init__()
 
         # Create Sinusoidal Time Embedding
@@ -229,15 +237,15 @@ class UNETTwo(nn.Module):
         for i in range(len(channel_list) - 1):
             cur_in_channels = in_channels if i == 0 else channel_list[i - 1]
             down_smap.append(DownSampleTwo(
-                cur_in_channels, channel_list[i], dconv_time=self.need_denoise, time_embed_count=denoise_embed_count,
-                dconv_res=dconv_res, dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+                cur_in_channels, channel_list[i], dconv_act_fn=dconv_act_fn, dconv_time=self.need_denoise,
+                time_embed_count=denoise_embed_count, dconv_res=dconv_res
             ))
         self.down_samplers = nn.ModuleList(down_smap)
 
         # Create bottleneck transition
         self.bottle_neck = DoubleConvTwo(
-            channel_list[-2], channel_list[-1], use_time=self.need_denoise, time_embed_count=denoise_embed_count,
-            use_res=dconv_res, use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            channel_list[-2], channel_list[-1], dconv_act_fn=dconv_act_fn, use_time=self.need_denoise,
+            time_embed_count=denoise_embed_count, use_res=dconv_res
         )
 
         # Create up samplers using nn.ModuleList
@@ -245,9 +253,9 @@ class UNETTwo(nn.Module):
         for i in range(len(channel_list) - 1, 0, -1):
             cur_attention = up_attention and i > 1
             up_samp.append(UpSampleTwo(
-                channel_list[i], channel_list[i - 1], use_attention=cur_attention, attn_pool=attn_pool,
-                dconv_time=self.need_denoise, time_embed_count=denoise_embed_count, dconv_res=dconv_res,
-                dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+                channel_list[i], channel_list[i - 1], up_drop_perc=up_drop_perc, use_attention=cur_attention,
+                attn_pool=attn_pool, dconv_act_fn=dconv_act_fn, dconv_time=self.need_denoise,
+                time_embed_count=denoise_embed_count, dconv_res=dconv_res
             ))
         self.up_samplers = nn.ModuleList(up_samp)
 
