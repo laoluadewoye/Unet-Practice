@@ -1,6 +1,9 @@
 import torch
 import math
+import copy
 import torch.nn as nn
+import torch.nn.functional as F
+from torchinfo import summary
 
 
 # Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
@@ -21,16 +24,19 @@ class DiffusionSinPosEmbeds(nn.Module):
 
 
 class DoubleConvThree(nn.Module):
-    def __init__(self, in_channels, out_channels, use_time=False, time_embed_count=0, use_bnorm=False, use_relu=False):
+    def __init__(self, in_channels, out_channels, dconv_act_fn=None, use_time=False, time_embed_count=0, use_res=False):
         super().__init__()
 
+        # Set activation function
+        dconv_act_fn_one = copy.deepcopy(dconv_act_fn) if dconv_act_fn is not None else nn.ReLU(inplace=True)
+        dconv_act_fn_two = copy.deepcopy(dconv_act_fn) if dconv_act_fn is not None else nn.ReLU(inplace=True)
+
         # First Convolution + Batch Norm and ReLU options
-        first_conv_list = [nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1)]
-        if use_bnorm:
-            first_conv_list.append(nn.BatchNorm3d(out_channels))
-        if use_relu:
-            first_conv_list.append(nn.ReLU(inplace=True))
-        self.first_conv = nn.Sequential(*first_conv_list)
+        self.first_conv = nn.Sequential(
+            nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm3d(out_channels),
+            dconv_act_fn_one
+        )
 
         # Optional time modification
         self.need_time = use_time
@@ -43,16 +49,24 @@ class DoubleConvThree(nn.Module):
             self.embed_adjuster = None
 
         # Second Convolution + Batch Norm and ReLU options
-        sec_conv_list = [nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1)]
-        if use_bnorm:
-            sec_conv_list.append(nn.BatchNorm3d(out_channels))
-        if use_relu:
-            sec_conv_list.append(nn.ReLU(inplace=True))
-        self.sec_conv = nn.Sequential(*sec_conv_list)
+        self.sec_conv = nn.Sequential(
+            nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm3d(out_channels),
+            dconv_act_fn_two
+        )
+
+        # Optional residual modification
+        self.need_res = use_res
+        if self.need_res:
+            self.res_match = nn.Conv3d(in_channels, out_channels, kernel_size=1)
+            self.res_act = nn.ReLU(inplace=True)
+        else:
+            self.res_match = None
+            self.res_act = None
 
     def forward(self, batch, time_embed=None):
         # Do first convolution set
-        batch = self.first_conv(batch)
+        conv_batch = self.first_conv(batch)
 
         # Create time embedding if needed
         if self.need_time:
@@ -69,22 +83,28 @@ class DoubleConvThree(nn.Module):
             adjusted_time_embed = adjusted_time_embed[(...,) + (None,) * 3]
 
             # Adds time-sensitive embeddings to batch
-            batch = batch + adjusted_time_embed
+            conv_batch = conv_batch + adjusted_time_embed
 
         # Do second convolution set
-        batch = self.sec_conv(batch)
-        return batch
+        conv_batch = self.sec_conv(conv_batch)
+
+        # Add residuals if needed
+        if self.need_res:
+            res_batch = self.res_match(batch)
+            conv_batch = self.res_act(conv_batch + res_batch)
+
+        return conv_batch
 
 
 class DownSampleThree(nn.Module):
-    def __init__(self, in_channels, out_channels, dconv_time=False, time_embed_count=0,
-                 dconv_bnorm=False, dconv_relu=False):
+    def __init__(self, in_channels, out_channels, dconv_act_fn=None, dconv_time=False, time_embed_count=0,
+                 dconv_res=False):
         super().__init__()
 
         # Double Convolution Step
         self.conv = DoubleConvThree(
-            in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
-            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
+            time_embed_count=time_embed_count, use_res=dconv_res
         )
 
         # 2x2 Max Pooling to Shrink image
@@ -101,7 +121,7 @@ class DownSampleThree(nn.Module):
 
 
 class AttentionThree(nn.Module):
-    def __init__(self, dec_skip_channels, inter_channels):
+    def __init__(self, dec_skip_channels, inter_channels, use_pool=False):
         super().__init__()
 
         # Perform 1x1 convolution on decoder channels
@@ -116,6 +136,17 @@ class AttentionThree(nn.Module):
             nn.BatchNorm3d(inter_channels),
         )
 
+        # Create pooling layers for skip connections if needed
+        self.need_pool = use_pool
+        if self.need_pool:
+            self.max_pool = nn.MaxPool3d(kernel_size=2, stride=1)
+            self.avg_pool = nn.AvgPool3d(kernel_size=2, stride=1)
+            self.pool_interpolate = lambda x, size: F.interpolate(x, size=size, mode='trilinear', align_corners=False)
+        else:
+            self.max_pool = None
+            self.avg_pool = None
+            self.pool_interpolate = None
+
         # Create an attention mask
         self.masker = nn.Sequential(
             nn.Conv3d(inter_channels, out_channels=1, kernel_size=1),
@@ -123,8 +154,8 @@ class AttentionThree(nn.Module):
             nn.Sigmoid()
         )
 
-        # Activation function for Spatial Attention Block
-        self.activation = nn.ReLU(inplace=True)
+        # ReLU Activation function for Spatial Attention Block
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, decoder, skip):
         # Create an intermediate decoder representation
@@ -133,8 +164,14 @@ class AttentionThree(nn.Module):
         # Create an intermediate skip representation
         skip_int = self.skip_conv(skip)
 
+        # Apply pooling operations if needed
+        if self.need_pool:
+            skip_max = self.max_pool(skip_int)
+            skip_avg = self.avg_pool(skip_int)
+            skip_int = self.pool_interpolate(skip_max + skip_avg, size=skip_int.shape[-3:])
+
         # Add together then apply activation to keep only noticeable features from both representations
-        combo_int = self.activation(decoder_int + skip_int)
+        combo_int = self.relu(decoder_int + skip_int)
 
         # Create a normalized attention mask to specify where to pay "attention" to
         masked_int = self.masker(combo_int)
@@ -144,24 +181,31 @@ class AttentionThree(nn.Module):
 
 
 class UpSampleThree(nn.Module):
-    def __init__(self, in_channels, out_channels, use_attention=False, dconv_time=False, time_embed_count=0,
-                 dconv_bnorm=False, dconv_relu=False):
+    def __init__(self, in_channels, out_channels, up_drop_perc=0.3, use_attention=False, attn_pool=False,
+                 dconv_act_fn=None, dconv_time=False, time_embed_count=0, dconv_res=False):
         super().__init__()
 
-        # 2x2 Upscale with channel shrinkage
-        self.upscaler = nn.ConvTranspose3d(in_channels, out_channels, kernel_size=2, stride=2)
+        # 2x2 Upscale with channel shrinkage, plus normalization, relu activation, and dropouts
+        upscaler = [
+            nn.ConvTranspose3d(in_channels, out_channels, kernel_size=2, stride=2),
+            nn.BatchNorm3d(out_channels),
+            nn.ReLU(inplace=True),
+        ]
+        if up_drop_perc > 0:
+            upscaler.append(nn.Dropout3d(up_drop_perc))
+        self.upscaler = nn.Sequential(*upscaler)
 
         # Attention block but only if needed
         self.need_attention = use_attention
         if self.need_attention:
-            self.attention = AttentionThree(in_channels // 2, out_channels // 2)
+            self.attention = AttentionThree(in_channels // 2, out_channels // 2, use_pool=attn_pool)
         else:
             self.attention = None
 
         # Double Convolution Step (assumes skip connection is present to combine long and short paths)
         self.conv = DoubleConvThree(
-            in_channels, out_channels, use_time=dconv_time, time_embed_count=time_embed_count,
-            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
+            time_embed_count=time_embed_count, use_res=dconv_res
         )
 
     def forward(self, cur, skip, time_embed=None):
@@ -179,7 +223,7 @@ class UpSampleThree(nn.Module):
 
 class UNETThree(nn.Module):
     def __init__(self, in_channels, channel_list, out_layer, denoise_diff=False, denoise_embed_count=0,
-                 up_attention=False, dconv_bnorm=False, dconv_relu=False):
+                 up_attention=False, attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, dconv_res=False):
         super().__init__()
 
         # Create Sinusoidal Time Embedding
@@ -196,15 +240,15 @@ class UNETThree(nn.Module):
         for i in range(len(channel_list) - 1):
             cur_in_channels = in_channels if i == 0 else channel_list[i - 1]
             down_smap.append(DownSampleThree(
-                cur_in_channels, channel_list[i], dconv_time=self.need_denoise,
-                time_embed_count=denoise_embed_count, dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+                cur_in_channels, channel_list[i], dconv_act_fn=dconv_act_fn, dconv_time=self.need_denoise,
+                time_embed_count=denoise_embed_count, dconv_res=dconv_res
             ))
         self.down_samplers = nn.ModuleList(down_smap)
 
         # Create bottleneck transition
         self.bottle_neck = DoubleConvThree(
-            channel_list[-2], channel_list[-1], use_time=self.need_denoise, time_embed_count=denoise_embed_count,
-            use_bnorm=dconv_bnorm, use_relu=dconv_relu
+            channel_list[-2], channel_list[-1], dconv_act_fn=dconv_act_fn, use_time=self.need_denoise,
+            time_embed_count=denoise_embed_count, use_res=dconv_res
         )
 
         # Create up samplers using nn.ModuleList
@@ -212,8 +256,9 @@ class UNETThree(nn.Module):
         for i in range(len(channel_list) - 1, 0, -1):
             cur_attention = up_attention and i > 1
             up_samp.append(UpSampleThree(
-                channel_list[i], channel_list[i - 1], use_attention=cur_attention, dconv_time=self.need_denoise,
-                time_embed_count=denoise_embed_count, dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
+                channel_list[i], channel_list[i - 1], up_drop_perc=up_drop_perc, use_attention=cur_attention,
+                attn_pool=attn_pool, dconv_act_fn=dconv_act_fn, dconv_time=self.need_denoise,
+                time_embed_count=denoise_embed_count, dconv_res=dconv_res
             ))
         self.up_samplers = nn.ModuleList(up_samp)
 
@@ -246,3 +291,13 @@ class UNETThree(nn.Module):
 
         # Apply custom output layer and return
         return self.out_layer(cur_up)
+
+
+if __name__ == '__main__':
+    model = UNETThree(
+        in_channels=1, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(),
+        up_attention=True, attn_pool=True, up_drop_perc=0.5,
+        dconv_act_fn=nn.LeakyReLU(0.2, inplace=True), dconv_res=True
+    )
+    print(model)
+    summary(model, input_size=(1, 1, 64, 64, 64), depth=5)

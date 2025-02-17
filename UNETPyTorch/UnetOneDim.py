@@ -300,4 +300,4 @@ if __name__ == '__main__':
         dconv_act_fn=nn.LeakyReLU(0.2, inplace=True), dconv_res=True
     )
     print(model)
-    summary(model, input_size=(4, 1, 256), depth=5)
+    summary(model, input_size=(1, 1, 64), depth=5)
