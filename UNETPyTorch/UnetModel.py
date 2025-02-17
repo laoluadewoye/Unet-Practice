@@ -24,8 +24,8 @@ def assert_ascending(lst):
 # Model based on DeepFind's "Diffusion models from scratch in PyTorch" video using my dynamic UNET as a base.
 class DiffusionUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
-                 use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002, time_steps=300,
-                 time_embed_count=32):
+                 use_attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, use_dconv_res=False, loss_rate=0.002,
+                 time_steps=300, time_embed_count=32):
 
         # Assertion list
         assert in_dimensions > 0, "in_dimensions must be greater than 0."
@@ -37,29 +37,32 @@ class DiffusionUNETModel:
         )
         assert isinstance(out_layer, nn.Module), "out_layer must be an instance of nn.Module."
 
-
         # Basic model information
         self.model_name = name
         self.dim_count = in_dimensions
         if self.dim_count == 1:
             self.model = UNETOne(
-                in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
-                denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, attn_pool=use_attn_pool,
+                up_drop_perc=up_drop_perc, denoise_diff=True, denoise_embed_count=time_embed_count,
+                dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
         elif self.dim_count == 2:
             self.model = UNETTwo(
-                in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
-                denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, attn_pool=use_attn_pool,
+                up_drop_perc=up_drop_perc, denoise_diff=True, denoise_embed_count=time_embed_count,
+                dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
         elif self.dim_count == 3:
             self.model = UNETThree(
-                in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
-                denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, attn_pool=use_attn_pool,
+                up_drop_perc=up_drop_perc, denoise_diff=True, denoise_embed_count=time_embed_count,
+                dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
         else:
             self.model = UNETNth(
-                in_dimensions, in_channels, conv_channels, out_layer, up_attention=use_up_atten, denoise_diff=True,
-                denoise_embed_count=time_embed_count, dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                self.dim_count, in_channels, conv_channels, out_layer, up_attention=use_up_atten,
+                attn_pool=use_attn_pool, up_drop_perc=up_drop_perc, denoise_diff=True,
+                denoise_embed_count=time_embed_count, dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
         self.param_count = sum(p.numel() for p in self.model.parameters())
         self.optimizer = Adam(self.model.parameters(), lr=loss_rate)
@@ -249,7 +252,7 @@ class DiffusionUNETModel:
 
 class GeneralUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
-                 use_dconv_bn=False, use_dconv_relu=False, loss_rate=0.002):
+                 use_attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, use_dconv_res=False, loss_rate=0.002):
 
         # Assertion list
         assert in_dimensions > 0, "in_dimensions must be greater than 0."
@@ -267,23 +270,23 @@ class GeneralUNETModel:
         # Model
         if self.dim_count == 1:
             self.model = UNETOne(
-                in_channels, conv_channels, out_layer, up_attention=use_up_atten,
-                dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, attn_pool=use_attn_pool,
+                up_drop_perc=up_drop_perc, dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
         elif self.dim_count == 2:
             self.model = UNETTwo(
-                in_channels, conv_channels, out_layer, up_attention=use_up_atten,
-                dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, attn_pool=use_attn_pool,
+                up_drop_perc=up_drop_perc, dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
         elif self.dim_count == 3:
             self.model = UNETThree(
-                in_channels, conv_channels, out_layer, up_attention=use_up_atten,
-                dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                in_channels, conv_channels, out_layer, up_attention=use_up_atten, attn_pool=use_attn_pool,
+                up_drop_perc=up_drop_perc, dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
         else:
             self.model = UNETNth(
                 self.dim_count, in_channels, conv_channels, out_layer, up_attention=use_up_atten,
-                dconv_bnorm=use_dconv_bn, dconv_relu=use_dconv_relu
+                attn_pool=use_attn_pool, up_drop_perc=up_drop_perc, dconv_act_fn=dconv_act_fn, dconv_res=use_dconv_res
             )
 
         self.param_count = sum(p.numel() for p in self.model.parameters())
