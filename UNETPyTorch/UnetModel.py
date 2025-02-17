@@ -15,6 +15,8 @@ from .UnetThreeDim import UNETThree
 from .UnetNDim import UNETNth
 
 
+# TODO: Create a Res-Net model
+# TODO: Somehow shove a transformer into here
 def assert_ascending(lst):
     return all(lst[i] <= lst[i + 1] for i in range(len(lst) - 1))
 

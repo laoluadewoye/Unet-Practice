@@ -5,3 +5,5 @@ Attention Modules using Pooling - https://www.researchgate.net/publication/36567
 Simple Diffusion - https://github.com/filipbasara0/simple-diffusion/blob/main/simple_diffusion/model/unet.py
 Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
 N-Dimensional Convolution - https://github.com/pvjosue/pytorch_convNd/blob/master/LICENSE
+Residual Block - https://www.digitalocean.com/community/tutorials/writing-resnet-from-scratch-in-pytorch
+ResNet from scratch - https://www.youtube.com/watch?v=DkNIBBBvcPs&t=1176s
