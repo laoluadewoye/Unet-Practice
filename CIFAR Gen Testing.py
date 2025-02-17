@@ -40,7 +40,7 @@ if __name__ == '__main__':
 
     model = DiffusionUNETModel(
         name='unet_diffusion_cifar10_model', in_dimensions=dimensions, in_channels=channels, conv_channels=conv_filters,
-        out_layer=my_out_layer, use_up_atten=True, use_dconv_bn=True, use_dconv_relu=True, loss_rate=optim_loss_rate,
+        out_layer=my_out_layer, use_up_atten=True, use_attn_pool=True, use_dconv_res=True, loss_rate=optim_loss_rate,
         time_steps=time_steps, time_embed_count=32
     )
 
@@ -65,7 +65,8 @@ if __name__ == '__main__':
 
     # Train the model
     epoch_count = 1
-    print_interval = max(1, len(dataloader) // 100)
+    print_count = 100
+    print_interval = max(1, len(dataloader) // print_count)
     model_train_stats = model.train_model(
         train_loader=dataloader, epochs=epoch_count, print_interval=print_interval,
         batch_size=BATCH_SIZE, sample_img_size=IMG_SIZE
