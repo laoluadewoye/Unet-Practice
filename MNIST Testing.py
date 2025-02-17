@@ -1,4 +1,5 @@
 from UNETPyTorch.UnetModel import GeneralUNETModel
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -28,8 +29,9 @@ class PoolSoftmaxOutput(nn.Module):
 
 
 # Specify normalization transformation for data
+IMG_SIZE = 64
 transform = transforms.Compose([
-    transforms.Resize((64, 64)),  # Resizes to a power of two for simple handling
+    transforms.Resize((IMG_SIZE, IMG_SIZE)),  # Resizes to a power of two for simple handling
     transforms.ToTensor(),  # Converts images to PyTorch tensors
     transforms.Normalize((0.5,), (0.5,))  # Normalize images (mean, std)
 ])
@@ -39,8 +41,9 @@ train_dataset = datasets.MNIST(root='./data', train=True, download=True, transfo
 test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
 # Create DataLoader to load data in batches
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+BATCH_SIZE = 32
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
 # Visualize a sample image to ensure it's loaded correctly
 first_image, first_label = train_dataset[0]
@@ -57,14 +60,19 @@ my_out_layer = PoolSoftmaxOutput(in_channels=conv_filters[0], out_classes=mnist_
 optim_loss_rate = 0.002
 mnist_model = GeneralUNETModel(
     name='unet_attention_mnist_model', in_dimensions=dimensions, in_channels=channels, conv_channels=conv_filters,
-    out_layer=my_out_layer, use_up_atten=True, use_dconv_bn=True, use_dconv_relu=True, loss_rate=optim_loss_rate
+    out_layer=my_out_layer, use_up_atten=True, use_attn_pool=True, loss_rate=optim_loss_rate
 )
 
 # Train the model
 epoch_count = 1
-print_interval = max(1, len(train_loader) // 100)
+print_count = 100
+print_interval = max(1, len(train_loader) // print_count)
 loss_module = nn.CrossEntropyLoss()
 model_train_stats = mnist_model.train_model(
     train_loader=train_loader, epochs=epoch_count, loss_func=loss_module, print_interval=print_interval
 )
 print(model_train_stats)
+
+# Test the model
+loss_module = nn.CrossEntropyLoss()
+mnist_model.test_model(test_loader=test_loader, loss_func=loss_module)

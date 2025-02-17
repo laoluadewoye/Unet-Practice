@@ -9,10 +9,13 @@ from torch.optim import Adam
 from torchvision import transforms
 import matplotlib.pyplot as plt
 
-from .UnetOneDim import UNETOne
-from .UnetTwoDim import UNETTwo
-from .UnetThreeDim import UNETThree
-from .UnetNDim import UNETNth
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from ConvUtils import *
+from UnetOneDim import UNETOne
+from UnetTwoDim import UNETTwo
+from UnetThreeDim import UNETThree
+from UnetNDim import UNETNth
 
 
 # TODO: Create a Res-Net model
@@ -362,3 +365,47 @@ class GeneralUNETModel:
         results_df.to_csv(f"{result_folder}/{self.model_name}_training_results.csv", index=False)
 
         return results_df
+
+    def test_model(self, test_loader, loss_func):
+        # Check if model can be used on gpu and move it there if available
+        print(f"Cuda availability status: {torch.cuda.is_available()}")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model.to(device)
+
+        # Set the model to eval mode
+        self.model.eval()
+
+        # Create total loss and count metric
+        total_loss = 0
+        total_count = 0
+
+        # Run the tests
+        for i, (test_inputs, test_labels) in enumerate(test_loader, 1):
+            # Move data to device
+            test_inputs = test_inputs.to(device)
+            test_labels = test_labels.to(device)
+
+            # Retrieve the batch of class predictions
+            test_preds = self.model(test_inputs)
+
+            # Get the loss
+            test_loss = loss_func(test_preds, test_labels)
+
+            # Add to loss and count
+            total_loss += test_loss.cpu().item()
+            total_count += 1
+
+            # Retrieve the highest index from each prediction
+            test_preds = torch.argmax(test_preds, dim=1)
+
+            # Print findings
+            print(f"Batch: {i}")
+            print(f"Predictions:    {test_preds}")
+            print(f"Labels:         {test_labels}")
+            print(f"Loss:           {test_loss.cpu().item():.4f}\n")
+
+        # Move everything back to cpu
+        self.model.to("cpu")
+
+        # Return the average loss
+        return total_loss / total_count
