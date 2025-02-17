@@ -1,6 +1,9 @@
 import torch
 import math
+import copy
 import torch.nn as nn
+import torch.nn.functional as F
+from torchinfo import summary
 
 
 # Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
@@ -20,14 +23,13 @@ class DiffusionSinPosEmbeds(nn.Module):
         return embeddings
 
 
-# TODO: Update uses of DoubleConvTwo
 class DoubleConvTwo(nn.Module):
     def __init__(self, in_channels, out_channels, dconv_act_fn=None, use_time=False, time_embed_count=0, use_res=False):
         super().__init__()
 
         # Set activation function
-        dconv_act_fn_one = dconv_act_fn if dconv_act_fn is not None else nn.ReLU(inplace=True)
-        dconv_act_fn_two = dconv_act_fn if dconv_act_fn is not None else nn.ReLU(inplace=True)
+        dconv_act_fn_one = copy.deepcopy(dconv_act_fn) if dconv_act_fn is not None else nn.ReLU(inplace=True)
+        dconv_act_fn_two = copy.deepcopy(dconv_act_fn) if dconv_act_fn is not None else nn.ReLU(inplace=True)
 
         # First Convolution + Batch Norm and ReLU options
         self.first_conv = nn.Sequential(
@@ -137,11 +139,13 @@ class AttentionTwo(nn.Module):
         # Create pooling layers for skip connections if needed
         self.need_pool = use_pool
         if self.need_pool:
-            self.max_pool = nn.MaxPool2d(kernel_size=2, stride=1, padding=1)
-            self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=1, padding=1)
+            self.max_pool = nn.MaxPool2d(kernel_size=2, stride=1)
+            self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=1)
+            self.pool_interpolate = lambda x, size: F.interpolate(x, size=size, mode='bilinear', align_corners=False)
         else:
             self.max_pool = None
             self.avg_pool = None
+            self.pool_interpolate = None
 
         # Create an attention mask
         self.masker = nn.Sequential(
@@ -164,7 +168,7 @@ class AttentionTwo(nn.Module):
         if self.need_pool:
             skip_max = self.max_pool(skip_int)
             skip_avg = self.avg_pool(skip_int)
-            skip_int = skip_max + skip_avg
+            skip_int = self.pool_interpolate(skip_max + skip_avg, size=skip_int.shape[-2:])
 
         # Add together then apply activation to keep only noticeable features from both representations
         combo_int = self.relu(decoder_int + skip_int)
@@ -176,7 +180,6 @@ class AttentionTwo(nn.Module):
         return skip * masked_int
 
 
-# TODO: Add Dropout
 class UpSampleTwo(nn.Module):
     def __init__(self, in_channels, out_channels, up_drop_perc=0.3, use_attention=False, attn_pool=False,
                  dconv_act_fn=None, dconv_time=False, time_embed_count=0, dconv_res=False):
@@ -288,3 +291,13 @@ class UNETTwo(nn.Module):
 
         # Apply custom output layer and return
         return self.out_layer(cur_up)
+
+
+if __name__ == '__main__':
+    model = UNETTwo(
+        in_channels=1, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(),
+        up_attention=True, attn_pool=True, up_drop_perc=0.5,
+        dconv_act_fn=nn.LeakyReLU(0.2, inplace=True), dconv_res=True
+    )
+    print(model)
+    summary(model, input_size=(1, 1, 64, 64), depth=5)
