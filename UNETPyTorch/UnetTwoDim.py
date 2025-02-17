@@ -118,7 +118,7 @@ class DownSampleTwo(nn.Module):
 
 
 class AttentionTwo(nn.Module):
-    def __init__(self, dec_skip_channels, inter_channels):
+    def __init__(self, dec_skip_channels, inter_channels, use_pool=False):
         super().__init__()
 
         # Perform 1x1 convolution on decoder channels
@@ -133,6 +133,15 @@ class AttentionTwo(nn.Module):
             nn.BatchNorm2d(inter_channels),
         )
 
+        # Create pooling layers for skip connections if needed
+        self.need_pool = use_pool
+        if self.need_pool:
+            self.max_pool = nn.MaxPool2d(kernel_size=2, stride=1, padding=1)
+            self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=1, padding=1)
+        else:
+            self.max_pool = None
+            self.avg_pool = None
+
         # Create an attention mask
         self.masker = nn.Sequential(
             nn.Conv2d(inter_channels, out_channels=1, kernel_size=1),
@@ -140,8 +149,8 @@ class AttentionTwo(nn.Module):
             nn.Sigmoid()
         )
 
-        # Activation function for Spatial Attention Block
-        self.activation = nn.ReLU(inplace=True)
+        # ReLU Activation function for Spatial Attention Block
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, decoder, skip):
         # Create an intermediate decoder representation
@@ -150,8 +159,14 @@ class AttentionTwo(nn.Module):
         # Create an intermediate skip representation
         skip_int = self.skip_conv(skip)
 
+        # Apply pooling operations if needed
+        if self.need_pool:
+            skip_max = self.max_pool(skip_int)
+            skip_avg = self.avg_pool(skip_int)
+            skip_int = skip_max + skip_avg
+
         # Add together then apply activation to keep only noticeable features from both representations
-        combo_int = self.activation(decoder_int + skip_int)
+        combo_int = self.relu(decoder_int + skip_int)
 
         # Create a normalized attention mask to specify where to pay "attention" to
         masked_int = self.masker(combo_int)
@@ -160,9 +175,10 @@ class AttentionTwo(nn.Module):
         return skip * masked_int
 
 
+# TODO: Add Dropout
 class UpSampleTwo(nn.Module):
-    def __init__(self, in_channels, out_channels, use_attention=False, dconv_time=False, time_embed_count=0,
-                 dconv_res=False, dconv_bnorm=False, dconv_relu=False):
+    def __init__(self, in_channels, out_channels, use_attention=False, attn_pool=False, dconv_time=False,
+                 time_embed_count=0, dconv_res=False, dconv_bnorm=False, dconv_relu=False):
         super().__init__()
 
         # 2x2 Upscale with channel shrinkage
@@ -171,7 +187,7 @@ class UpSampleTwo(nn.Module):
         # Attention block but only if needed
         self.need_attention = use_attention
         if self.need_attention:
-            self.attention = AttentionTwo(in_channels // 2, out_channels // 2)
+            self.attention = AttentionTwo(in_channels // 2, out_channels // 2, use_pool=attn_pool)
         else:
             self.attention = None
 
@@ -196,7 +212,7 @@ class UpSampleTwo(nn.Module):
 
 class UNETTwo(nn.Module):
     def __init__(self, in_channels, channel_list, out_layer, denoise_diff=False, denoise_embed_count=0,
-                 up_attention=False, dconv_res=False, dconv_bnorm=False, dconv_relu=False):
+                 up_attention=False, attn_pool=False, dconv_res=False, dconv_bnorm=False, dconv_relu=False):
         super().__init__()
 
         # Create Sinusoidal Time Embedding
@@ -229,9 +245,9 @@ class UNETTwo(nn.Module):
         for i in range(len(channel_list) - 1, 0, -1):
             cur_attention = up_attention and i > 1
             up_samp.append(UpSampleTwo(
-                channel_list[i], channel_list[i - 1], use_attention=cur_attention, dconv_time=self.need_denoise,
-                time_embed_count=denoise_embed_count, dconv_res=dconv_res, dconv_bnorm=dconv_bnorm,
-                dconv_relu=dconv_relu
+                channel_list[i], channel_list[i - 1], use_attention=cur_attention, attn_pool=attn_pool,
+                dconv_time=self.need_denoise, time_embed_count=denoise_embed_count, dconv_res=dconv_res,
+                dconv_bnorm=dconv_bnorm, dconv_relu=dconv_relu
             ))
         self.up_samplers = nn.ModuleList(up_samp)
 
