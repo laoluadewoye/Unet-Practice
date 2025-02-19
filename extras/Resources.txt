@@ -8,3 +8,4 @@ N-Dimensional Convolution - https://github.com/pvjosue/pytorch_convNd/blob/maste
 Residual Block - https://www.digitalocean.com/community/tutorials/writing-resnet-from-scratch-in-pytorch
 ResNet from scratch - https://www.youtube.com/watch?v=DkNIBBBvcPs&t=1176s
 Transformer UNET - https://arxiv.org/pdf/2103.06104
+Multi-head attention - https://www.datacamp.com/tutorial/building-a-transformer-with-py-torch

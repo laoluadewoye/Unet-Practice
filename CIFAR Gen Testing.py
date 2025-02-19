@@ -1,4 +1,4 @@
-from UNETPyTorch.UnetModel import DiffusionUNETModel
+from UNETPyTorch.V1.UnetModel import DiffusionUNETModel
 
 import torch
 import torch.nn as nn

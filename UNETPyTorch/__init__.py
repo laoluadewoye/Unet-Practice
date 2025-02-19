@@ -1,3 +1,3 @@
-__all__ = ["UnetModel", "UnetOneDim", "UnetTwoDim", "UnetThreeDim", "UnetNDim", "ConvUtils"]
+__all__ = ["V1", "V2"]
 
-from . import UnetModel, UnetOneDim, UnetTwoDim, UnetThreeDim, UnetNDim, ConvUtils
+from . import V1, V2
