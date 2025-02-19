@@ -106,31 +106,7 @@ class DoubleConvN(nn.Module):
         return conv_batch
 
 
-class DownSampleN(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, dconv_act_fn=None, dconv_time=False, time_embed_count=0,
-                 dconv_res=False):
-        super().__init__()
-
-        # Double Convolution Step
-        self.conv = DoubleConvN(
-            dimensions, in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
-            time_embed_count=time_embed_count, use_res=dconv_res
-        )
-
-        # 2x2 Max Pooling to Shrink image
-        self.pool = MaxPoolNd(dimensions, kernel_size=2, strides=2, padding=0, dilation=1)
-
-    def forward(self, batch, time_embed=None):
-        # Channel change for skip connection
-        conv_batch = self.conv(batch, time_embed)
-
-        # Downsample for next step
-        encoded_batch = self.pool(conv_batch)
-
-        return conv_batch, encoded_batch
-
-
-class AttentionN(nn.Module):
+class SpatialAttentionN(nn.Module):
     def __init__(self, dimensions, dec_skip_channels, inter_channels, use_pool=False):
         super().__init__()
 
@@ -192,6 +168,30 @@ class AttentionN(nn.Module):
         return skip * masked_int
 
 
+class DownSampleN(nn.Module):
+    def __init__(self, dimensions, in_channels, out_channels, dconv_act_fn=None, dconv_time=False, time_embed_count=0,
+                 dconv_res=False):
+        super().__init__()
+
+        # Double Convolution Step
+        self.conv = DoubleConvN(
+            dimensions, in_channels, out_channels, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
+            time_embed_count=time_embed_count, use_res=dconv_res
+        )
+
+        # 2x2 Max Pooling to Shrink image
+        self.pool = MaxPoolNd(dimensions, kernel_size=2, strides=2, padding=0, dilation=1)
+
+    def forward(self, batch, time_embed=None):
+        # Channel change for skip connection
+        conv_batch = self.conv(batch, time_embed)
+
+        # Downsample for next step
+        encoded_batch = self.pool(conv_batch)
+
+        return conv_batch, encoded_batch
+
+
 class UpSampleN(nn.Module):
     def __init__(self, dimensions, in_channels, out_channels, up_drop_perc=0.3, use_attention=False, attn_pool=False,
                  dconv_act_fn=None, dconv_time=False, time_embed_count=0, dconv_res=False):
@@ -213,7 +213,7 @@ class UpSampleN(nn.Module):
         # Attention block but only if needed
         self.need_attention = use_attention
         if self.need_attention:
-            self.attention = AttentionN(dimensions, in_channels // 2, out_channels // 2, use_pool=attn_pool)
+            self.attention = SpatialAttentionN(dimensions, in_channels // 2, out_channels // 2, use_pool=attn_pool)
         else:
             self.attention = None
 
