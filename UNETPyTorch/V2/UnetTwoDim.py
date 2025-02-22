@@ -1,5 +1,30 @@
 import torch
+import math
 import torch.nn as nn
+
+
+# Altered from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
+class DiffusionEmbeds(nn.Module):
+    def __init__(self, dimensions, theta=10000):
+        super().__init__()
+
+        # Make dimensions even
+        if dimensions % 2 != 0:
+            print("Warning: Dimensions not even, adding 1...")
+            dimensions += 1
+        half_dimensions = dimensions // 2
+
+        # Altered math for embeds to be precomputed and registered
+        embeds = math.log(theta) / (half_dimensions - 1)
+        embeds = torch.exp(torch.arange(half_dimensions) * -embeds).unsqueeze(0)
+        embeds = torch.stack((embeds.sin(), embeds.cos()), dim=-1)
+        embeds = embeds.reshape(embeds.shape[0], -1)
+
+        self.register_buffer('embeds', embeds)
+
+    def forward(self, time_steps):
+        device = time_steps.device
+        return time_steps.unsqueeze(-1) * self.embeds.to(device)
 
 
 # Copied from PyTorch Transformer Tutorial - https://www.datacamp.com/tutorial/building-a-transformer-with-py-torch
@@ -18,8 +43,6 @@ class QKVPosEmbeds(nn.Module):
 
     def forward(self, x):
         return x + self.pe[:, :x.size(1)]
-
-
 
 
 class QKVAttentionTwo(nn.Module):
@@ -52,3 +75,15 @@ class QKVAttentionTwo(nn.Module):
         queries = self.query_weights(pe_lin_encoding)
         keys = self.key_weights(pe_lin_encoding)
         values = self.value_weights(pe_lin_encoding)
+
+
+if __name__ == "__main__":
+    # Sample time step data
+    ts = torch.randint(0, 300, (4,))
+
+    # Sample embedding
+    embeder = DiffusionEmbeds(32, 10000)
+    te = embeder(ts)
+
+    print(ts)
+    print(te)
