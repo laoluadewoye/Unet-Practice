@@ -14,6 +14,15 @@ class ConvSetTwo(nn.Module):
         # Assert that the channel sequence is at least 3 items long (for double convolution)
         assert len(channel_sequence) >= 3, "Sequence of channels must be at least three for a proper ConvSet."
 
+        # Assert that the kernel sequence and padding sequence is at least 2 items long (for double convolution)
+        assert len(kernel_sequence) >= 2, "Sequence of kernels must be at least two for a proper ConvSet."
+        assert len(padding_sequence) >= 2, "Sequence of padding must be at least two for a proper ConvSet."
+
+        # Assert that the kernels, padding, and channel (minus one) are the same length
+        assert len(kernel_sequence) == len(padding_sequence) == (len(channel_sequence) - 1), (
+            "Kernels and padding must be the same length."
+        )
+
         # List of convolutions to conduct
         conv_list = []
         for i in range(len(channel_sequence) - 1):

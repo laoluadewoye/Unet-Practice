@@ -53,6 +53,67 @@ class AttnPosEmbeds(nn.Module):
         return flat_enc + self.embeds[:, :, :flat_enc.size(2)]
 
 
+class SpatialAttention(nn.Module):
+    def __init__(self, dec_skip_channels, inter_channels, use_pool=False):
+        super().__init__()
+
+        # Perform 1x1 convolution on decoder channels
+        self.encoder_conv = nn.Sequential(
+            nn.Conv1d(dec_skip_channels, inter_channels, kernel_size=1),
+            nn.BatchNorm1d(inter_channels),
+        )
+
+        # Perform 1x1 convolution on skip connections
+        self.skip_conv = nn.Sequential(
+            nn.Conv1d(dec_skip_channels, inter_channels, kernel_size=1),
+            nn.BatchNorm1d(inter_channels),
+        )
+
+        # Create pooling layers for skip connections if needed
+        self.need_pool = use_pool
+        if self.need_pool:
+            self.max_pool = nn.MaxPool1d(kernel_size=2, stride=1)
+            self.avg_pool = nn.AvgPool1d(kernel_size=2, stride=1)
+            self.pool_interpolate = lambda x, size: F.interpolate(x, size=size, mode='linear', align_corners=False)
+        else:
+            self.max_pool = None
+            self.avg_pool = None
+            self.pool_interpolate = None
+
+        # Create an attention mask
+        self.masker = nn.Sequential(
+            nn.Conv1d(inter_channels, out_channels=1, kernel_size=1),
+            nn.BatchNorm1d(num_features=1),
+            nn.Sigmoid()
+        )
+
+        # ReLU Activation function for Spatial Attention Block
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, pe_lin_encoding, pe_lin_skip):
+        # Assume everything is already flattened and position embedded
+        # Create an intermediate decoder representation
+        encoder_int = self.encoder_conv(pe_lin_encoding)
+
+        # Create an intermediate skip representation
+        skip_int = self.skip_conv(pe_lin_skip)
+
+        # Apply pooling operations if needed
+        if self.need_pool:
+            skip_max = self.max_pool(skip_int)
+            skip_avg = self.avg_pool(skip_int)
+            skip_int = self.pool_interpolate(skip_max + skip_avg, size=skip_int.shape[-1:])
+
+        # Add together then apply activation to keep only noticeable features from both representations
+        combo_int = self.relu(encoder_int + skip_int)
+
+        # Create a normalized attention mask to specify where to pay "attention" to
+        masked_int = self.masker(combo_int)
+
+        # Adjust the skip connection information using the mask to tailor the information
+        return pe_lin_skip * masked_int
+
+
 class QKVAttention(nn.Module):
     def __init__(self, self_channels, heads=1, skip_channels=None):
         super().__init__()
@@ -114,19 +175,22 @@ class QKVAttention(nn.Module):
         # Reshape value output back to the right shape
         attn_values = attn_values.permute(0, 2, 1, 3)
         attn_values = attn_values.reshape(attn_values.shape[0], attn_values.shape[1], -1)
-        out_values = self.out_weights(attn_values).permute(0, 2, 1)
+        skip_out_values = self.out_weights(attn_values).permute(0, 2, 1)
 
-        return out_values
+        return skip_out_values
 
 
 if __name__ == "__main__":
     # Sample time step data
-    sample_encoding = torch.rand(4, 32, 64, 64)
-    sample_encoding = sample_encoding.reshape(4, 32, -1)
+    sample_encoding_one = torch.rand(4, 32, 64, 64)
+    sample_encoding_one = sample_encoding_one.reshape(4, 32, -1)
+
+    sample_encoding_two = torch.rand(4, 32, 64, 64)
+    sample_encoding_two = sample_encoding_two.reshape(4, 32, -1)
 
     # Sample embedding
     enc_embeder = AttnPosEmbeds(32, 5000)
-    enc_embedding = enc_embeder(sample_encoding)
+    enc_embedding = enc_embeder(sample_encoding_one)
 
     # Skip embedding
     sample_skip = torch.rand(4, 16, 128, 128)
@@ -134,6 +198,13 @@ if __name__ == "__main__":
     skip_embeder = AttnPosEmbeds(16, 17000)
     skip_embedding = skip_embeder(sample_skip)
 
-    # Sample attention
+    # Sample QKV attention
     attn = QKVAttention(32, skip_channels=16)
     attn(enc_embedding, skip_embedding)
+
+    attn = QKVAttention(32, skip_channels=32)
+    attn(enc_embedding, sample_encoding_two)
+
+    # Sample spatial attention
+    attn = SpatialAttention(32, inter_channels=16)
+    attn(enc_embedding, sample_encoding_two)
