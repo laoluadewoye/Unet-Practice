@@ -1,10 +1,11 @@
 import torch
 import math
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 # Altered from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
-class DiffusionEmbeds(nn.Module):
+class DiffPosEmbeds(nn.Module):
     def __init__(self, dimensions, theta=10000):
         super().__init__()
 
@@ -27,26 +28,33 @@ class DiffusionEmbeds(nn.Module):
         return time_steps.unsqueeze(-1) * self.embeds.to(device)
 
 
-# Copied from PyTorch Transformer Tutorial - https://www.datacamp.com/tutorial/building-a-transformer-with-py-torch
-class QKVPosEmbeds(nn.Module):
-    def __init__(self, channels, max_seq_length):
+# Altered from PyTorch Transformer Tutorial - https://www.datacamp.com/tutorial/building-a-transformer-with-py-torch
+class AttnPosEmbeds(nn.Module):
+    def __init__(self, channels, max_seq_length, theta=10000):
         super().__init__()
 
-        pe = torch.zeros(max_seq_length, channels)
-        position = torch.arange(0, max_seq_length, dtype=torch.float).unsqueeze(1)
-        div_term = torch.exp(torch.arange(0, channels, 2).float() * -(math.log(10000.0) / channels))
+        # Create empty embedding
+        embeds = torch.zeros(channels, max_seq_length)
 
-        pe[:, 0::2] = torch.sin(position * div_term)
-        pe[:, 1::2] = torch.cos(position * div_term)
+        # Create the positions for each channel
+        position = torch.arange(0, max_seq_length, dtype=torch.float).unsqueeze(0)
 
-        self.register_buffer('pe', pe.unsqueeze(0))
+        # Create the divisor for each channel
+        div_term = torch.exp(torch.arange(0, channels, 2).float() * -(math.log(theta) / channels))
+        div_term = div_term.unsqueeze(1)
 
-    def forward(self, x):
-        return x + self.pe[:, :x.size(1)]
+        # Generate a channels x max_seq_length embedding and apply it every other row
+        embeds[0::2, :] = torch.sin(div_term * position)
+        embeds[1::2, :] = torch.cos(div_term * position)
+
+        self.register_buffer('embeds', embeds.unsqueeze(0))
+
+    def forward(self, flat_enc):
+        return flat_enc + self.embeds[:, :, :flat_enc.size(2)]
 
 
 class QKVAttentionTwo(nn.Module):
-    def __init__(self, channels, max_seq_length, heads=1, mask=False):
+    def __init__(self, channels, heads=1, skip_channels=None):
         super().__init__()
 
         # Ensure that the model dimension (d_model) is divisible by the number of heads
@@ -56,34 +64,61 @@ class QKVAttentionTwo(nn.Module):
 
         # Initialize dimensions
         self.channels = channels  # Model's dimension
+        self.skip_channels = skip_channels  # Optional skip connection's dimension
         self.heads = heads  # Number of attention heads
         self.channels_per_head = self.channels // self.heads
 
         # Weights
         self.query_weights = nn.Linear(self.channels, self.channels)
         self.key_weights = nn.Linear(self.channels, self.channels)
-        self.value_weights = nn.Linear(self.channels, self.channels)
-        self.out_weights = nn.Linear(self.channels, self.channels)
 
-        # TODO: Mask
+        if self.skip_channels is not None:
+            self.value_weights = nn.Linear(self.skip_channels, self.skip_channels)
+            self.out_weights = nn.Linear(self.skip_channels, self.skip_channels)
+        else:
+            self.value_weights = nn.Linear(self.channels, self.channels)
+            self.out_weights = nn.Linear(self.channels, self.channels)
 
-    def forward(self, pe_lin_encoding, pe_lin_skip):
-        # Convert encoding to one dimension
-        pe_lin_encoding = pe_lin_encoding.reshape(pe_lin_encoding.shape[0], pe_lin_encoding.shape[1], -1)
+    def divide_by_heads(self, input_tensor):
+        # Pad the last set of data at the end if necessary
+        if input_tensor.shape[-1] % self.heads != 0:
+            residual = input_tensor.shape[-1] % self.heads
+            input_tensor = F.pad(input_tensor, (0, residual), "constant", 0)
 
+        # Divide by heads and move the heads to the second dimension
+        input_divided = input_tensor.reshape(input_tensor.shape[0], input_tensor.shape[1], self.heads, -1)
+        input_divided = input_divided.permute(0, 2, 1, 3)
+
+        return input_divided
+
+    def forward(self, pe_lin_encoding, pe_lin_skip=None):
+        # Assume everything is already flattened and position embedded
         # Create queries, keys, and values
-        queries = self.query_weights(pe_lin_encoding)
-        keys = self.key_weights(pe_lin_encoding)
-        values = self.value_weights(pe_lin_encoding)
+        queries = self.divide_by_heads(self.query_weights(pe_lin_encoding.permute(0, 2, 1)))
+        keys = self.divide_by_heads(self.key_weights(pe_lin_encoding.permute(0, 2, 1)))
+        if pe_lin_skip is not None:
+            values = self.divide_by_heads(self.value_weights(pe_lin_skip.permute(0, 2, 1)))
+        else:
+            values = self.divide_by_heads(self.value_weights(pe_lin_encoding.permute(0, 2, 1)))
+
+        print(values)
 
 
 if __name__ == "__main__":
     # Sample time step data
-    ts = torch.randint(0, 300, (4,))
+    sample_encoding = torch.rand(4, 32, 64, 64)
+    sample_encoding = sample_encoding.reshape(4, 32, -1)
 
     # Sample embedding
-    embeder = DiffusionEmbeds(32, 10000)
-    te = embeder(ts)
+    enc_embeder = AttnPosEmbeds(32, 5000)
+    enc_embedding = enc_embeder(sample_encoding)
 
-    print(ts)
-    print(te)
+    # Skip embedding
+    sample_skip = torch.rand(4, 16, 128, 128)
+    sample_skip = sample_skip.reshape(4, 16, -1)
+    skip_embeder = AttnPosEmbeds(16, 17000)
+    skip_embedding = skip_embeder(sample_skip)
+
+    # Sample attention
+    attn = QKVAttentionTwo(32, 8, 16)
+    attn(enc_embedding, skip_embedding)
