@@ -54,35 +54,37 @@ class AttnPosEmbeds(nn.Module):
 
 
 class SpatialAttention(nn.Module):
-    def __init__(self, dec_skip_channels, inter_channels, use_pool=False):
+    def __init__(self, enc_channels, skip_channels=None, inter_channels=None):
         super().__init__()
 
-        # Perform 1x1 convolution on decoder channels
-        self.encoder_conv = nn.Sequential(
-            nn.Conv1d(dec_skip_channels, inter_channels, kernel_size=1),
-            nn.BatchNorm1d(inter_channels),
-        )
+        skip_conv_channels = skip_channels if skip_channels is not None else enc_channels
+        masker_channels = inter_channels if inter_channels is not None else skip_conv_channels
 
-        # Perform 1x1 convolution on skip connections
-        self.skip_conv = nn.Sequential(
-            nn.Conv1d(dec_skip_channels, inter_channels, kernel_size=1),
-            nn.BatchNorm1d(inter_channels),
-        )
+        # Check if an intermediate encoder convolution is needed
+        if inter_channels is not None or skip_channels is not None:
+            self.encoder_conv = nn.Sequential(
+                nn.Conv1d(enc_channels, masker_channels, kernel_size=1),
+                nn.BatchNorm1d(masker_channels),
+            )
+        else:
+            self.encoder_conv = None
+
+        # Check if an intermediate skip convolution is needed
+        if inter_channels is not None:
+            self.skip_conv = nn.Sequential(
+                nn.Conv1d(skip_conv_channels, inter_channels, kernel_size=1),
+                nn.BatchNorm1d(inter_channels),
+            )
+        else:
+            self.skip_conv = None
 
         # Create pooling layers for skip connections if needed
-        self.need_pool = use_pool
-        if self.need_pool:
-            self.max_pool = nn.MaxPool1d(kernel_size=2, stride=1)
-            self.avg_pool = nn.AvgPool1d(kernel_size=2, stride=1)
-            self.pool_interpolate = lambda x, size: F.interpolate(x, size=size, mode='linear', align_corners=False)
-        else:
-            self.max_pool = None
-            self.avg_pool = None
-            self.pool_interpolate = None
+        self.max_pool = nn.MaxPool1d(kernel_size=2, stride=1)
+        self.avg_pool = nn.AvgPool1d(kernel_size=2, stride=1)
 
         # Create an attention mask
         self.masker = nn.Sequential(
-            nn.Conv1d(inter_channels, out_channels=1, kernel_size=1),
+            nn.Conv1d(masker_channels, out_channels=1, kernel_size=1),
             nn.BatchNorm1d(num_features=1),
             nn.Sigmoid()
         )
@@ -92,30 +94,27 @@ class SpatialAttention(nn.Module):
 
     def forward(self, pe_lin_encoding, pe_lin_skip):
         # Assume everything is already flattened and position embedded
-        # Create an intermediate decoder representation
-        encoder_int = self.encoder_conv(pe_lin_encoding)
-
-        # Create an intermediate skip representation
-        skip_int = self.skip_conv(pe_lin_skip)
+        # Create an intermediate representations if needed
+        encoder_int = self.encoder_conv(pe_lin_encoding) if self.encoder_conv is not None else pe_lin_encoding
+        skip_int = self.skip_conv(pe_lin_skip) if self.skip_conv is not None else pe_lin_skip
 
         # Apply pooling operations if needed
-        if self.need_pool:
-            skip_max = self.max_pool(skip_int)
-            skip_avg = self.avg_pool(skip_int)
-            skip_int = self.pool_interpolate(skip_max + skip_avg, size=skip_int.shape[-1:])
+        skip_max = self.max_pool(skip_int)
+        skip_avg = self.avg_pool(skip_int)
+        skip_int = F.interpolate(skip_max + skip_avg, pe_lin_skip.shape[-1], mode='linear')
+        skip_int = F.adaptive_avg_pool1d(skip_int, encoder_int.shape[-1])
 
         # Add together then apply activation to keep only noticeable features from both representations
         combo_int = self.relu(encoder_int + skip_int)
 
         # Create a normalized attention mask to specify where to pay "attention" to
-        masked_int = self.masker(combo_int)
+        masked_int = F.interpolate(self.masker(combo_int), pe_lin_skip.shape[-1], mode='linear')
 
-        # Adjust the skip connection information using the mask to tailor the information
         return pe_lin_skip * masked_int
 
 
 class QKVAttention(nn.Module):
-    def __init__(self, self_channels, heads=1, skip_channels=None):
+    def __init__(self, self_channels, skip_channels=None, heads=1):
         super().__init__()
 
         # Ensure that the model dimension (d_model) is divisible by the number of heads
@@ -158,8 +157,10 @@ class QKVAttention(nn.Module):
         keys = self.divide_by_heads(self.key_weights(pe_lin_encoding.permute(0, 2, 1)))
         if pe_lin_skip is not None and self.skip_channels is not None:
             values = self.divide_by_heads(self.value_weights(pe_lin_skip.permute(0, 2, 1)))
-        else:
+        elif pe_lin_skip is None and self.skip_channels is None:
             values = self.divide_by_heads(self.value_weights(pe_lin_encoding.permute(0, 2, 1)))
+        else:
+            raise ValueError("Both skip_channels and pe_lin_skip must be provided.")
 
         # Calculate attention score
         attn_scores = torch.matmul(queries, keys.permute(0, 1, 3, 2)) / math.sqrt(self.self_channels_per_head)
@@ -168,8 +169,7 @@ class QKVAttention(nn.Module):
         attn_probs = torch.softmax(attn_scores, dim=-1)
 
         # Apply probability focus to values
-        if pe_lin_skip is not None and self.skip_channels is not None:
-            values = F.adaptive_avg_pool2d(values, (pe_lin_encoding.shape[2], values.shape[-1]))
+        values = F.adaptive_avg_pool2d(values, (pe_lin_encoding.shape[2], values.shape[-1]))
         attn_values = torch.matmul(attn_probs, values)
 
         # Reshape value output back to the right shape
@@ -206,5 +206,14 @@ if __name__ == "__main__":
     attn(enc_embedding, sample_encoding_two)
 
     # Sample spatial attention
+    attn = SpatialAttention(32, inter_channels=16, skip_channels=16)
+    attn(enc_embedding, skip_embedding)
+
+    attn = SpatialAttention(32, skip_channels=16)
+    attn(enc_embedding, skip_embedding)
+
     attn = SpatialAttention(32, inter_channels=16)
+    attn(enc_embedding, sample_encoding_two)
+
+    attn = SpatialAttention(32)
     attn(enc_embedding, sample_encoding_two)
