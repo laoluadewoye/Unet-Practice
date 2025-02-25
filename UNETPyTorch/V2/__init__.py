@@ -4,3 +4,4 @@
 # TODO: Ensure both Attention modules can do self and cross attention
 # TODO: Pass initial size/tuple of data
 # TODO: UNET should have an intro and outro module that is nn.Identity by default
+# TODO: ResNet should support attention

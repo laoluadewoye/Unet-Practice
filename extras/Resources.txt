@@ -11,3 +11,4 @@ Transformer UNET - https://arxiv.org/pdf/2103.06104
                  - https://paperswithcode.com/paper/u-net-transformer-self-and-cross-attention
                  - https://github.com/MoaazK/unet-transformer
 Multi-head attention - https://www.datacamp.com/tutorial/building-a-transformer-with-py-torch
+Channel & spatial attention - https://paperswithcode.com/paper/cbam-convolutional-block-attention-module
