@@ -257,7 +257,7 @@ class AttentionOptions(StrEnum):
 
 class Attention(nn.Module):
     def __init__(self, attn_order, enc_channels, skip_channels=None, channel_ratio=8, spatial_inter_channels=None,
-                 qkv_heads=1):
+                 qkv_heads=1, use_pos=False, pos_max_len=0):
         super().__init__()
 
         skip_conv_channels = skip_channels if skip_channels is not None else enc_channels
@@ -265,6 +265,16 @@ class Attention(nn.Module):
         self.post_qkv = None
         attn_list = []
 
+        # Create positional encoding
+        self.need_pos = use_pos
+        if self.need_pos:
+            self.enc_pos = AttnPosEmbeds(enc_channels, pos_max_len)
+            self.skip_pos = AttnPosEmbeds(skip_conv_channels, pos_max_len)
+        else:
+            self.enc_pos = None
+            self.skip_pos = None
+
+        # Create attention list
         for attn in attn_order:
             if attn.lower() == "channel":
                 attn_list.append(ChannelAttention(enc_channels, skip_conv_channels, channel_ratio))
@@ -286,9 +296,15 @@ class Attention(nn.Module):
 
     def forward(self, pe_lin_encoding, pe_lin_skip=None):
         # Assume everything is already flattened and position embedded
-        skip_out = pe_lin_skip
+        skip_out = pe_lin_skip if pe_lin_skip is not None else pe_lin_encoding
         interpolate_shape = pe_lin_skip.shape[-1] if pe_lin_skip is not None else pe_lin_encoding.shape[-1]
 
+        # Apply positional embeddings if needed
+        if self.need_pos:
+            pe_lin_encoding = self.enc_pos(pe_lin_encoding)
+            skip_out = self.skip_pos(skip_out)
+
+        # Apply attention set
         for i in range(len(self.attn_list)):
             skip_out = self.attn_list[i](pe_lin_encoding, skip_out)
             if i == self.uses_qkv:
@@ -303,9 +319,6 @@ if __name__ == "__main__":
     sample_encoding_one = torch.rand(4, 32, 64, 64)
     sample_encoding_one = sample_encoding_one.reshape(4, 32, -1)
 
-    sample_encoding_two = torch.rand(4, 32, 64, 64)
-    sample_encoding_two = sample_encoding_two.reshape(4, 32, -1)
-
     # Sample embedding
     enc_embeder = AttnPosEmbeds(32, 5000)
     enc_embedding = enc_embeder(sample_encoding_one)
@@ -316,46 +329,7 @@ if __name__ == "__main__":
     skip_embeder = AttnPosEmbeds(16, 17000)
     skip_embedding = skip_embeder(sample_skip)
 
-    # Sample QKV attention
-    sample_attn = QKVAttention(32, skip_channels=16)
-    sample_attn(enc_embedding, skip_embedding)
-
-    sample_attn = QKVAttention(32, skip_channels=32)
-    sample_attn(enc_embedding, sample_encoding_two)
-
-    sample_attn = QKVAttention(32)
-    sample_attn(enc_embedding)
-
-    # Sample spatial attention
-    sample_attn = SpatialAttention(32, inter_channels=16, skip_channels=16)
-    sample_attn(enc_embedding, skip_embedding)
-
-    sample_attn = SpatialAttention(32, skip_channels=16)
-    sample_attn(enc_embedding, skip_embedding)
-
-    sample_attn = SpatialAttention(32, inter_channels=16)
-    sample_attn(enc_embedding, sample_encoding_two)
-    sample_attn(enc_embedding)
-
-    sample_attn = SpatialAttention(32)
-    sample_attn(enc_embedding, sample_encoding_two)
-    sample_attn(enc_embedding)
-
-    # Sample channel attention
-    sample_attn = ChannelAttention(32, skip_channels=16)
-    sample_attn(enc_embedding, skip_embedding)
-
-    sample_attn = ChannelAttention(32)
-    sample_attn(enc_embedding, sample_encoding_two)
-    sample_attn(enc_embedding)
-
     # Sample attention combination
-    sample_attn_order = [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL, AttentionOptions.QKV]
-    sample_attn = Attention(sample_attn_order, 32, skip_channels=16)
-    sample_attn(enc_embedding, skip_embedding)
-
-    sample_attn = Attention(sample_attn_order, 32)
-    sample_attn(enc_embedding, sample_encoding_two)
-
-    sample_attn = Attention(sample_attn_order, 32)
-    sample_attn(enc_embedding)
+    sample_attn_order = [AttentionOptions.QKV]
+    sample_attn = Attention(sample_attn_order, 32, skip_channels=16, use_pos=True, pos_max_len=128*128)
+    sample_attn(sample_encoding_one, sample_skip)
