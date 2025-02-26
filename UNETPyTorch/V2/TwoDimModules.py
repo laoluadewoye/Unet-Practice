@@ -3,11 +3,11 @@ import os
 import copy
 from torchinfo import summary
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from GenUtils import *
+from EmbedAttnUtils import *
 
 
 class ConvSetTwo(nn.Module):
-    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, stride=1, dconv_act_fn=None,
+    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, stride=1, act_function=None,
                  use_time=False, time_embed_count=0, use_res=False):
         super().__init__()
 
@@ -39,7 +39,7 @@ class ConvSetTwo(nn.Module):
                     padding=padding_sequence[i], stride=cur_stride
                 ),
                 nn.BatchNorm2d(channel_sequence[i+1]),
-                copy.deepcopy(dconv_act_fn) if dconv_act_fn is not None else nn.ReLU(inplace=True)
+                copy.deepcopy(act_function) if act_function is not None else nn.ReLU(inplace=True)
             ))
 
         # Get it recognized by PyTorch
@@ -75,8 +75,8 @@ class ConvSetTwo(nn.Module):
         if self.need_time:
             # Assert that the time_embed is not none
             assert time_embed is not None, (
-                "Time embedding is not provided for double convolution step.\n"
-                f"\tDouble Conv Layer info: {self}.\n\n"
+                "Time embedding is not provided for convolution steps.\n"
+                f"\tConvSet Layer info: {self}.\n\n"
             )
 
             # Retrieves the embed given a time step
@@ -101,14 +101,14 @@ class ConvSetTwo(nn.Module):
 
 
 class DownSampleTwo(nn.Module):
-    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, dconv_act_fn=None,
-                 dconv_time=False, time_embed_count=0, dconv_res=False):
+    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, conv_act_fn=None,
+                 conv_time=False, conv_time_embed_count=0, conv_res=False):
         super().__init__()
 
-        # Double Convolution Step
+        # Convolution Step
         self.conv = ConvSetTwo(
-            channel_sequence, kernel_sequence, padding_sequence, dconv_act_fn=dconv_act_fn, use_time=dconv_time,
-            time_embed_count=time_embed_count, use_res=dconv_res
+            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn,
+            use_time=conv_time, time_embed_count=conv_time_embed_count, use_res=conv_res
         )
 
         # 2x2 Max Pooling to Shrink image
@@ -125,11 +125,51 @@ class DownSampleTwo(nn.Module):
 
 
 class UpSampleTwo(nn.Module):
-    ...
+    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, up_drop_perc=0.3, attention_args=None,
+                 conv_act_fn=None, conv_time=False, conv_time_embed_count=0, conv_res=False):
+        super().__init__()
+
+        # Setting attention
+        if attention_args is not None:
+            self.attention = Attention(**attention_args)
+        else:
+            self.attention = None
+
+        # 2x2 Upscale with channel shrinkage, plus normalization, relu activation, and dropouts
+        upscaler = [
+            nn.ConvTranspose2d(channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2),
+            nn.BatchNorm2d(channel_sequence[-1]),
+            nn.ReLU(inplace=True),
+        ]
+        if up_drop_perc > 0:
+            upscaler.append(nn.Dropout(up_drop_perc))
+        self.upscaler = nn.Sequential(*upscaler)
+
+        # Convolution Step (assumes skip connection is present to combine long and short paths)
+        self.conv = ConvSetTwo(
+            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn,
+            use_time=conv_time, time_embed_count=conv_time_embed_count, use_res=conv_res
+        )
+
+    def forward(self, cur, skip, time_embed=None):
+        # Apply attention block to skip connection if needed
+        if self.attention is not None:
+            attn_skip = self.attention(
+                cur.reshape(cur.shape[0], cur.shape[1], -1),
+                skip.reshape(skip.shape[0], skip.shape[1], -1)
+            )
+            skip = attn_skip.reshape(skip.shape[0], skip.shape[1], skip.shape[2], skip.shape[3])
+
+        # Upscale encoding
+        cur_upscaled = self.upscaler(cur)
+
+        # Combine results then final convolution
+        combined = torch.cat([cur_upscaled, skip], 1)
+        return self.conv(combined, time_embed)
 
 
 def make_res_net_layer(channel_sequence: list, kernel_sequence, padding_sequence, set_count, stride):
-    set_list = [ConvSetTwo(channel_sequence, kernel_sequence, padding_sequence, use_res=True, stride=stride)]
+    set_list = [ConvSetTwo(channel_sequence, kernel_sequence, padding_sequence, stride=stride, use_res=True)]
     channel_sequence[0] = channel_sequence[-1]
 
     for i in range(set_count - 1):
@@ -137,8 +177,7 @@ def make_res_net_layer(channel_sequence: list, kernel_sequence, padding_sequence
 
     return nn.Sequential(*set_list)
 
-
-if __name__ == "__main__":
+def res_net_fifty():
     # Create test conv sets
     test_res_net_module_one = make_res_net_layer(
         [3, 64, 64, 256], (1, 3, 1), (0, 1, 0), 3, 1
@@ -157,3 +196,26 @@ if __name__ == "__main__":
         test_res_net_module_one, test_res_net_module_two, test_res_net_module_three, test_res_net_module_four
     )
     summary(res_net_fifty, (4, 3, 64, 64), depth=5)
+
+
+if __name__ == "__main__":
+    # Create an encoding and skip
+    encoding = torch.randn((4, 512, 16, 16))
+    skip = torch.randn((4, 256, 32, 32))
+
+    # Create test upsampler
+    channels = [512, 256, 256]
+    kernels = (3, 3)
+    padding = (1, 1)
+    attn_args = {
+        'attn_order': [AttentionOptions.QKV],
+        'enc_channels': 512,
+        'skip_channels': 256,
+        'qkv_heads': 8
+    }
+    up_sampler = UpSampleTwo(channels, kernels, padding, attention_args=attn_args)
+
+    # Test
+    output = up_sampler(encoding, skip)
+    print(encoding.shape)
+    print(output.shape)
