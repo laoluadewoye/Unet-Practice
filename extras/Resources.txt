@@ -7,6 +7,7 @@ Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
 N-Dimensional Convolution - https://github.com/pvjosue/pytorch_convNd/blob/master/LICENSE
 Residual Block - https://www.digitalocean.com/community/tutorials/writing-resnet-from-scratch-in-pytorch
 ResNet from scratch - https://www.youtube.com/watch?v=DkNIBBBvcPs&t=1176s
+                    - https://arxiv.org/pdf/1512.03385
 Transformer UNET - https://arxiv.org/pdf/2103.06104
                  - https://paperswithcode.com/paper/u-net-transformer-self-and-cross-attention
                  - https://github.com/MoaazK/unet-transformer

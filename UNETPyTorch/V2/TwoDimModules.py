@@ -88,6 +88,7 @@ class ConvSetTwo(nn.Module):
             # Retrieves the embed given a time step
             adjusted_time_embed = self.embed_adjuster(time_embed)
 
+            # TODO: When making other dimensional stuff, pay close attention to this. Other than that, it's fine.
             # Expands the shape to (batch, out_channels, 1, 1)
             adjusted_time_embed = adjusted_time_embed[(...,) + (None,) * 2]
 
@@ -260,7 +261,7 @@ class UNETTwo(nn.Module):
         if conv_attn_args is not None:
             conv_attn_args['enc_channels'] = cur_seq[-1]
             conv_attn_args['skip_channels'] = cur_seq[-1]
-            conv_attn_args['spatial_inter_channels'] = cur_seq[-1]
+            conv_attn_args['spatial_inter_channels'] = cur_seq[-1] // 2
             cur_conv_attn = conv_attn_args
 
         return UpSampleTwo(
@@ -301,61 +302,157 @@ class UNETTwo(nn.Module):
 
 
 class ResNetTwo(nn.Module):
-    ...
+    def __init__(self, layer_channels_list, layer_kernels_list, layer_paddings_list, layer_set_list,
+                 in_layer=None, out_layer=None, denoise_diff=False, denoise_embed_count=0, conv_act_fn=None,
+                 conv_attn_args=None, conv_res=False):
+        super().__init__()
+
+        # Assert that all lists are equal to each other
+        assert len(layer_channels_list) == len(layer_kernels_list) == len(layer_paddings_list) == len(layer_set_list), \
+            "All ResNet lists must be the same length."
+
+        # Set convolution stuff
+        self.conv_act_fn = conv_act_fn
+        self.conv_attn_args = conv_attn_args
+        self.conv_res = conv_res
+        self.denoise_embed_count = denoise_embed_count
+
+        # Set custom input layer
+        self.in_layer = in_layer if in_layer is not None else nn.Identity()
+
+        # Create Sinusoidal Time Embedding
+        self.need_denoise = denoise_diff
+        if self.need_denoise:
+            self.time_embeds = nn.Sequential(
+                DiffPosEmbeds(denoise_embed_count, theta=10000),
+                nn.Linear(denoise_embed_count, denoise_embed_count),
+                nn.ReLU(inplace=True)
+            )
+
+        # Create ResNet layer list
+        res_net_layers = []
+        first_layer_made = False
+        res_net_package = zip(layer_channels_list, layer_kernels_list, layer_paddings_list, layer_set_list)
+        for channels, kernels, paddings, set_count in res_net_package:
+            if not first_layer_made:
+                cur_stride = 1
+                first_layer_made = True
+            else:
+                cur_stride = 2
+            res_net_layers.append(
+                self.create_resnet_layer(channels, kernels, paddings, set_count, stride=cur_stride)
+            )
+        self.res_net_layers = nn.ModuleList(res_net_layers)
+
+        # Set custom output layer
+        self.out_layer = out_layer if out_layer is not None else nn.Identity()
+
+    def create_resnet_layer(self, channel_sequence: list, kernel_sequence, padding_sequence, set_count, stride):
+        self.conv_attn_args['enc_channels'] = channel_sequence[-1]
+        self.conv_attn_args['skip_channels'] = channel_sequence[-1]
+        self.conv_attn_args['spatial_inter_channels'] = channel_sequence[-1] // 2
+
+        set_list = [ConvSetTwo(
+            channel_sequence, kernel_sequence, padding_sequence, stride=stride, act_function=self.conv_act_fn,
+            use_time=self.need_denoise, time_embed_count=self.denoise_embed_count,
+            attention_args=self.conv_attn_args, use_res=self.conv_res
+        )]
+        channel_sequence[0] = channel_sequence[-1]
+
+        for i in range(set_count - 1):
+            set_list.append(ConvSetTwo(
+                channel_sequence, kernel_sequence, padding_sequence, act_function=self.conv_act_fn,
+                use_time=self.need_denoise, time_embed_count=self.denoise_embed_count,
+                attention_args=self.conv_attn_args, use_res=self.conv_res,
+            ))
+
+        return nn.ModuleList(set_list)
+
+    def forward(self, batch, time_step=None):
+        # Conduct input sequence
+        batch_in = self.in_layer(batch)
+
+        # Get time embedding if needed
+        if self.need_denoise:
+            time_embed = self.time_embeds(time_step)
+        else:
+            time_embed = None
+
+        # Pass information through ResNet
+        batch_res = batch_in
+        for section in self.res_net_layers:
+            for conv_set in section:
+                batch_res = conv_set(batch_res, time_embed)
+
+        # Conduct output sequence
+        batch_out = self.out_layer(batch_res)
+        return batch_out
 
 
-def make_res_net_layer(channel_sequence: list, kernel_sequence, padding_sequence, set_count, stride):
-    set_list = [ConvSetTwo(channel_sequence, kernel_sequence, padding_sequence, stride=stride, use_res=True)]
-    channel_sequence[0] = channel_sequence[-1]
-
-    for i in range(set_count - 1):
-        set_list.append(ConvSetTwo(channel_sequence, kernel_sequence, padding_sequence, use_res=True))
-
-    return nn.Sequential(*set_list)
-
-
-def res_net_fifty():
-    # Create test conv sets
-    test_res_net_module_one = make_res_net_layer(
-        [3, 64, 64, 256], (1, 3, 1), (0, 1, 0), 3, 1
+def res_net_fifty(in_channels, out_classes, use_cbam=False):
+    # Create custom input layer
+    in_layer = nn.Sequential(
+        nn.Conv2d(in_channels, 64, 7, stride=2, padding=3),
+        nn.BatchNorm2d(64),
+        nn.ReLU(inplace=True),
+        nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
     )
-    test_res_net_module_two = make_res_net_layer(
-        [256, 128, 128, 512], (1, 3, 1), (0, 1, 0), 4, 2
-    )
-    test_res_net_module_three = make_res_net_layer(
-        [512, 256, 256, 1024], (1, 3, 1), (0, 1, 0), 6, 2
-    )
-    test_res_net_module_four = make_res_net_layer(
-        [1024, 512, 512, 2048], (1, 3, 1), (0, 1, 0), 3, 2
+
+    # Create layer list inputs
+    lcl = [[64, 64, 64, 256], [256, 128, 128, 512], [512, 256, 256, 1024], [1024, 512, 512, 2048]]
+    lkl = [(1, 3, 1)] * 4
+    lpl = [(0, 1, 0)] * 4
+    lsl = [3, 4, 6, 3]
+
+    # Create custom output layer
+    out_layer = nn.Sequential(
+        nn.AdaptiveAvgPool2d((1, 1)),
+        nn.Flatten(),
+        nn.Linear(2048, out_classes),
+        nn.Softmax(dim=1)
     )
 
-    res_net_fifty = nn.Sequential(
-        test_res_net_module_one, test_res_net_module_two, test_res_net_module_three, test_res_net_module_four
+    # Create CBAM Attention
+    if use_cbam:
+        cbam_args = {'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL]}
+    else:
+        cbam_args = None
+
+    # Create ResNet
+    return ResNetTwo(
+        lcl, lkl, lpl, lsl, in_layer=in_layer, out_layer=out_layer, denoise_diff=True, denoise_embed_count=32,
+        conv_attn_args=cbam_args, conv_res=True
     )
-    summary(res_net_fifty, (4, 3, 64, 64), depth=5)
 
 
 if __name__ == "__main__":
     # Set the aspect size and channels
-    data_size = 256
-    channels = 3
-    batch_size = 1
+    test_data_size = 224
+    test_channels = 1
+    test_batch_size = 1
+
+    data = torch.randn(test_batch_size, test_channels, test_data_size, test_data_size)
+    time_steps = torch.randint(0, 300, (test_batch_size,))
 
     # Create a test UNET that uses CBAM Residual Convolution Blocks and Upscaling Transformer Blocks
     cbam_args = {
         'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL], 'use_pos': True,
-        'pos_max_len': data_size*data_size
+        'pos_max_len': test_data_size * test_data_size
     }
     transformer_args = {
-        'attn_order': [AttentionOptions.QKV], 'qkv_heads': 8, 'use_pos': True, 'pos_max_len': data_size*data_size
+        'attn_order': [AttentionOptions.QKV], 'qkv_heads': 8, 'use_pos': True, 'pos_max_len': test_data_size * test_data_size
     }
     model = UNETTwo(
-        in_channels=channels, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(), denoise_diff=True,
+        in_channels=test_channels, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(), denoise_diff=True,
         denoise_embed_count=32, up_drop_perc=0.5, up_attn_args=transformer_args,
         conv_act_fn=nn.LeakyReLU(0.2, inplace=True), conv_attn_args=cbam_args, conv_res=True
     )
 
-    # View model summary
-    data = torch.randn(batch_size, channels, data_size, data_size)
-    time_steps = torch.randint(0, 300, (batch_size,))
+    # View UNET summary
+    summary(model, input_data=(data, time_steps,), depth=10)
+
+    # Create a test ResNet that uses CBAM Residual Convolution Blocks
+    model = res_net_fifty(test_channels, 1000, use_cbam=True)
+
+    # View ResNet summary
     summary(model, input_data=(data, time_steps,), depth=10)
