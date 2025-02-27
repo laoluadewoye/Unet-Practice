@@ -6,9 +6,10 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from EmbedAttnUtils import *
 
 
-class ConvSetTwo(nn.Module):
-    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, stride=1, act_function=None,
-                 use_time=False, time_embed_count=0, attention_args=None, use_res=False):
+class ConvSet(nn.Module):
+    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, dims=2, conv_function=nn.Conv2d,
+                 bn_function=nn.BatchNorm2d, stride=1, act_function=None, use_time=False, time_embed_count=0,
+                 attention_args=None, use_residual=False):
         super().__init__()
 
         # Assert that the channel sequence is at least 3 items long (for double convolution)
@@ -23,6 +24,9 @@ class ConvSetTwo(nn.Module):
             "Kernels and padding must be the same length."
         )
 
+        # Set dimensions
+        self.dimensions = dims
+
         # List of convolutions to conduct
         conv_list = []
         for i in range(len(channel_sequence) - 1):
@@ -34,11 +38,11 @@ class ConvSetTwo(nn.Module):
 
             # Add the convolution module
             conv_list.append(nn.Sequential(
-                nn.Conv2d(
+                conv_function(
                     channel_sequence[i], channel_sequence[i+1], kernel_size=kernel_sequence[i],
                     padding=padding_sequence[i], stride=cur_stride
                 ),
-                nn.BatchNorm2d(channel_sequence[i+1]),
+                bn_function(channel_sequence[i + 1]),
                 copy.deepcopy(act_function) if act_function is not None else nn.ReLU(inplace=True)
             ))
 
@@ -62,11 +66,11 @@ class ConvSetTwo(nn.Module):
             self.attention = None
 
         # Optional residual modification
-        self.need_res = use_res
+        self.need_res = use_residual
         if self.need_res:
             self.res_match = nn.Sequential(
-                nn.Conv2d(channel_sequence[0], channel_sequence[-1], kernel_size=1, stride=stride),
-                nn.BatchNorm2d(channel_sequence[-1]),
+                conv_function(channel_sequence[0], channel_sequence[-1], kernel_size=1, stride=stride),
+                bn_function(channel_sequence[-1]),
             )
             self.res_act = nn.ReLU(inplace=True)
         else:
@@ -88,9 +92,8 @@ class ConvSetTwo(nn.Module):
             # Retrieves the embed given a time step
             adjusted_time_embed = self.embed_adjuster(time_embed)
 
-            # TODO: When making other dimensional stuff, pay close attention to this. Other than that, it's fine.
-            # Expands the shape to (batch, out_channels, 1, 1)
-            adjusted_time_embed = adjusted_time_embed[(...,) + (None,) * 2]
+            # Expands the shape to (batch, out_channels, other dimensions)
+            adjusted_time_embed = adjusted_time_embed[(...,) + (None,) * self.dimensions]
 
             # Adds time-sensitive embeddings to batch
             conv_batch = conv_batch + adjusted_time_embed
@@ -112,19 +115,21 @@ class ConvSetTwo(nn.Module):
         return conv_batch
 
 
-class DownSampleTwo(nn.Module):
-    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, conv_act_fn=None,
-                 conv_time=False, conv_time_embed_count=0, conv_attn_args=None, conv_res=False):
+class DownSample(nn.Module):
+    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, dims=2, conv_function=nn.Conv2d,
+                 bn_function=nn.BatchNorm2d, mp_function=nn.MaxPool2d, conv_act_fn=None, conv_time=False,
+                 conv_time_embed_count=0, conv_attn_args=None, conv_residual=False):
         super().__init__()
 
         # Convolution Step
-        self.conv = ConvSetTwo(
-            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn, use_time=conv_time,
-            time_embed_count=conv_time_embed_count, attention_args=conv_attn_args, use_res=conv_res
+        self.conv = ConvSet(
+            channel_sequence, kernel_sequence, padding_sequence, dims=dims, conv_function=conv_function,
+            bn_function=bn_function, act_function=conv_act_fn, use_time=conv_time,
+            time_embed_count=conv_time_embed_count, attention_args=conv_attn_args, use_residual=conv_residual
         )
 
         # 2x2 Max Pooling to Shrink image
-        self.pool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.pool = mp_function(kernel_size=2, stride=2)
 
     def forward(self, batch, time_embed=None):
         # Channel change for skip connection
@@ -136,9 +141,10 @@ class DownSampleTwo(nn.Module):
         return conv_batch, encoded_batch
 
 
-class UpSampleTwo(nn.Module):
-    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, up_drop_perc=0.3, attention_args=None,
-                 conv_act_fn=None, conv_time=False, conv_time_embed_count=0, conv_attn_args=None, conv_res=False):
+class UpSample(nn.Module):
+    def __init__(self, channel_sequence, kernel_sequence, padding_sequence, dims=2, conv_function=nn.Conv2d,
+                 bn_function=nn.BatchNorm2d, conv_trans_func=nn.ConvTranspose2d, up_drop_perc=0.3, attention_args=None,
+                 conv_act_fn=None, conv_time=False, conv_time_embed_count=0, conv_attn_args=None, conv_residual=False):
         super().__init__()
 
         # Setting attention
@@ -149,8 +155,8 @@ class UpSampleTwo(nn.Module):
 
         # 2x2 Upscale with channel shrinkage, plus normalization, relu activation, and dropouts
         upscaler = [
-            nn.ConvTranspose2d(channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2),
-            nn.BatchNorm2d(channel_sequence[-1]),
+            conv_trans_func(channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2),
+            bn_function(channel_sequence[-1]),
             nn.ReLU(inplace=True),
         ]
         if up_drop_perc > 0:
@@ -158,9 +164,10 @@ class UpSampleTwo(nn.Module):
         self.upscaler = nn.Sequential(*upscaler)
 
         # Convolution Step (assumes skip connection is present to combine long and short paths)
-        self.conv = ConvSetTwo(
-            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn, use_time=conv_time,
-            time_embed_count=conv_time_embed_count, attention_args=conv_attn_args, use_res=conv_res
+        self.conv = ConvSet(
+            channel_sequence, kernel_sequence, padding_sequence, dims=dims, conv_function=conv_function,
+            bn_function=bn_function, act_function=conv_act_fn, use_time=conv_time,
+            time_embed_count=conv_time_embed_count, attention_args=conv_attn_args, use_residual=conv_residual
         )
 
     def forward(self, cur, skip, time_embed=None):
@@ -180,11 +187,19 @@ class UpSampleTwo(nn.Module):
         return self.conv(combined, time_embed)
 
 
-class UNETTwo(nn.Module):
-    def __init__(self, in_channels, channel_list, in_layer=None, out_layer=None, denoise_diff=False,
-                 denoise_embed_count=0, up_drop_perc=0.3, up_attn_args=None, conv_act_fn=None, conv_attn_args=None,
-                 conv_res=False):
+class UNET(nn.Module):
+    def __init__(self, in_channels, channel_list, in_layer=None, out_layer=None, data_dims=2, conv_function=nn.Conv2d,
+                 bn_function=nn.BatchNorm2d, mp_function=nn.MaxPool2d, conv_trans_func=nn.ConvTranspose2d,
+                 denoise_diff=False, denoise_embed_count=0, up_drop_perc=0.3, up_attn_args=None, conv_act_fn=None,
+                 conv_attn_args=None, conv_residual=False):
         super().__init__()
+
+        # Set dimension-specific information
+        self.data_dimensions = data_dims
+        self.conv_function = conv_function
+        self.bn_function = bn_function
+        self.mp_function = mp_function
+        self.conv_trans_func = conv_trans_func
 
         # Set custom input layer
         self.in_layer = in_layer if in_layer is not None else nn.Identity()
@@ -204,15 +219,16 @@ class UNETTwo(nn.Module):
             cur_in_channels = in_channels if i == 0 else channel_list[i - 1]
             cur_seq = [cur_in_channels, channel_list[i], channel_list[i]]
             down_smap.append(
-                self.create_downsampler(cur_seq, conv_attn_args, conv_act_fn, denoise_embed_count, conv_res)
+                self.create_downsampler(cur_seq, conv_attn_args, conv_act_fn, denoise_embed_count, conv_residual)
             )
         self.down_samplers = nn.ModuleList(down_smap)
 
         # Create bottleneck transition and attention if needed
         bn_seq = [channel_list[-2], channel_list[-1], channel_list[-1]]
-        self.bottle_neck = ConvSetTwo(
-            bn_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), act_function=conv_act_fn,
-            use_time=self.need_denoise, time_embed_count=denoise_embed_count, use_res=conv_res
+        self.bottle_neck = ConvSet(
+            bn_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), dims=self.data_dimensions,
+            conv_function=self.conv_function, bn_function=self.bn_function, act_function=conv_act_fn,
+            use_time=self.need_denoise, time_embed_count=denoise_embed_count, use_residual=conv_residual
         )
         if up_attn_args is not None:
             up_attn_args['enc_channels'] = channel_list[-1]
@@ -227,14 +243,14 @@ class UNETTwo(nn.Module):
         for i in range(len(channel_list) - 1, 0, -1):
             cur_seq = [channel_list[i], channel_list[i-1], channel_list[i-1]]
             up_samp.append(self.create_upsampler(
-                cur_seq, i, up_drop_perc, up_attn_args, conv_attn_args, conv_act_fn, denoise_embed_count, conv_res
+                cur_seq, i, up_drop_perc, up_attn_args, conv_attn_args, conv_act_fn, denoise_embed_count, conv_residual
             ))
         self.up_samplers = nn.ModuleList(up_samp)
 
         # Set custom output layer
         self.out_layer = out_layer if out_layer is not None else nn.Identity()
 
-    def create_downsampler(self, cur_seq, conv_attn_args, conv_act_fn, denoise_embed_count, conv_res):
+    def create_downsampler(self, cur_seq, conv_attn_args, conv_act_fn, denoise_embed_count, conv_residual):
         cur_conv_attn = None
         if conv_attn_args is not None:
             conv_attn_args['enc_channels'] = cur_seq[-1]
@@ -242,14 +258,15 @@ class UNETTwo(nn.Module):
             conv_attn_args['spatial_inter_channels'] = cur_seq[-1] // 2
             cur_conv_attn = conv_attn_args
 
-        return DownSampleTwo(
-            cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), conv_act_fn=conv_act_fn,
-            conv_time=self.need_denoise, conv_time_embed_count=denoise_embed_count, conv_attn_args=cur_conv_attn,
-            conv_res=conv_res
+        return DownSample(
+            cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), dims=self.data_dimensions,
+            conv_function=self.conv_function, bn_function=self.bn_function, mp_function=self.mp_function,
+            conv_act_fn=conv_act_fn, conv_time=self.need_denoise, conv_time_embed_count=denoise_embed_count,
+            conv_attn_args=cur_conv_attn, conv_residual=conv_residual
         )
 
     def create_upsampler(self, cur_seq, cur_index, up_drop_perc, up_attn_args, conv_attn_args, conv_act_fn,
-                         denoise_embed_count, conv_res):
+                         denoise_embed_count, conv_residual):
         cur_up_attn = None
         if up_attn_args is not None and cur_index > 1:
             up_attn_args['enc_channels'] = cur_seq[0]
@@ -264,10 +281,11 @@ class UNETTwo(nn.Module):
             conv_attn_args['spatial_inter_channels'] = cur_seq[-1] // 2
             cur_conv_attn = conv_attn_args
 
-        return UpSampleTwo(
-            cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), up_drop_perc=up_drop_perc,
-            attention_args=cur_up_attn, conv_act_fn=conv_act_fn, conv_time=self.need_denoise,
-            conv_time_embed_count=denoise_embed_count, conv_attn_args=cur_conv_attn, conv_res=conv_res
+        return UpSample(
+            cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), dims=self.data_dimensions,
+            conv_function=self.conv_function, bn_function=self.bn_function, conv_trans_func=self.conv_trans_func,
+            up_drop_perc=up_drop_perc, attention_args=cur_up_attn, conv_act_fn=conv_act_fn, conv_time=self.need_denoise,
+            conv_time_embed_count=denoise_embed_count, conv_attn_args=cur_conv_attn, conv_residual=conv_residual
         )
 
     def forward(self, batch, time_step=None):
@@ -301,20 +319,25 @@ class UNETTwo(nn.Module):
         return self.out_layer(cur_up)
 
 
-class ResNetTwo(nn.Module):
+class ResNet(nn.Module):
     def __init__(self, layer_channels_list, layer_kernels_list, layer_paddings_list, layer_set_list,
-                 in_layer=None, out_layer=None, denoise_diff=False, denoise_embed_count=0, conv_act_fn=None,
-                 conv_attn_args=None, conv_res=False):
+                 in_layer=None, out_layer=None, data_dims=2, conv_function=nn.Conv2d, bn_function=nn.BatchNorm2d,
+                 denoise_diff=False, denoise_embed_count=0, conv_act_fn=None, conv_attn_args=None, conv_residual=False):
         super().__init__()
 
         # Assert that all lists are equal to each other
         assert len(layer_channels_list) == len(layer_kernels_list) == len(layer_paddings_list) == len(layer_set_list), \
             "All ResNet lists must be the same length."
 
+        # Set dimension-specific information
+        self.data_dimensions = data_dims
+        self.conv_function = conv_function
+        self.bn_function = bn_function
+
         # Set convolution stuff
         self.conv_act_fn = conv_act_fn
         self.conv_attn_args = conv_attn_args
-        self.conv_res = conv_res
+        self.conv_residual = conv_residual
         self.denoise_embed_count = denoise_embed_count
 
         # Set custom input layer
@@ -352,18 +375,20 @@ class ResNetTwo(nn.Module):
         self.conv_attn_args['skip_channels'] = channel_sequence[-1]
         self.conv_attn_args['spatial_inter_channels'] = channel_sequence[-1] // 2
 
-        set_list = [ConvSetTwo(
-            channel_sequence, kernel_sequence, padding_sequence, stride=stride, act_function=self.conv_act_fn,
+        set_list = [ConvSet(
+            channel_sequence, kernel_sequence, padding_sequence, stride=stride, dims=self.data_dimensions,
+            conv_function=self.conv_function, bn_function=self.bn_function, act_function=self.conv_act_fn,
             use_time=self.need_denoise, time_embed_count=self.denoise_embed_count,
-            attention_args=self.conv_attn_args, use_res=self.conv_res
+            attention_args=self.conv_attn_args, use_residual=self.conv_residual
         )]
         channel_sequence[0] = channel_sequence[-1]
 
         for i in range(set_count - 1):
-            set_list.append(ConvSetTwo(
-                channel_sequence, kernel_sequence, padding_sequence, act_function=self.conv_act_fn,
+            set_list.append(ConvSet(
+                channel_sequence, kernel_sequence, padding_sequence, dims=self.data_dimensions,
+                conv_function=self.conv_function, bn_function=self.bn_function, act_function=self.conv_act_fn,
                 use_time=self.need_denoise, time_embed_count=self.denoise_embed_count,
-                attention_args=self.conv_attn_args, use_res=self.conv_res,
+                attention_args=self.conv_attn_args, use_residual=self.conv_residual
             ))
 
         return nn.ModuleList(set_list)
@@ -389,7 +414,23 @@ class ResNetTwo(nn.Module):
         return batch_out
 
 
-def res_net_fifty(in_channels, out_classes, use_cbam=False):
+def two_dim_transformer_unet(in_channels, attn_pos_max_len):
+    cbam_args = {
+        'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL], 'use_pos': True,
+        'pos_max_len': attn_pos_max_len
+    }
+    transformer_args = {
+        'attn_order': [AttentionOptions.QKV], 'qkv_heads': 8, 'use_pos': True,
+        'pos_max_len': attn_pos_max_len
+    }
+    return UNET(
+        in_channels=in_channels, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(),
+        denoise_diff=True, denoise_embed_count=32, up_drop_perc=0.5, up_attn_args=transformer_args,
+        conv_act_fn=nn.LeakyReLU(0.2, inplace=True), conv_attn_args=cbam_args, conv_residual=True
+    )
+
+
+def two_dim_res_net_fifty(in_channels, out_classes, use_cbam=False):
     # Create custom input layer
     in_layer = nn.Sequential(
         nn.Conv2d(in_channels, 64, 7, stride=2, padding=3),
@@ -418,10 +459,10 @@ def res_net_fifty(in_channels, out_classes, use_cbam=False):
     else:
         cbam_args = None
 
-    # Create ResNet
-    return ResNetTwo(
+    # Create ResNet with default 2D data handling
+    return ResNet(
         lcl, lkl, lpl, lsl, in_layer=in_layer, out_layer=out_layer, denoise_diff=True, denoise_embed_count=32,
-        conv_attn_args=cbam_args, conv_res=True
+        conv_attn_args=cbam_args, conv_residual=True
     )
 
 
@@ -434,25 +475,14 @@ if __name__ == "__main__":
     data = torch.randn(test_batch_size, test_channels, test_data_size, test_data_size)
     time_steps = torch.randint(0, 300, (test_batch_size,))
 
-    # Create a test UNET that uses CBAM Residual Convolution Blocks and Upscaling Transformer Blocks
-    cbam_args = {
-        'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL], 'use_pos': True,
-        'pos_max_len': test_data_size * test_data_size
-    }
-    transformer_args = {
-        'attn_order': [AttentionOptions.QKV], 'qkv_heads': 8, 'use_pos': True, 'pos_max_len': test_data_size * test_data_size
-    }
-    model = UNETTwo(
-        in_channels=test_channels, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(), denoise_diff=True,
-        denoise_embed_count=32, up_drop_perc=0.5, up_attn_args=transformer_args,
-        conv_act_fn=nn.LeakyReLU(0.2, inplace=True), conv_attn_args=cbam_args, conv_res=True
-    )
+    # Create a test UNET that uses CBAM Residual Convolution Blocks and Up-scaling Transformer Blocks
+    two_dim_model = two_dim_transformer_unet(test_channels, test_data_size*test_data_size)
 
     # View UNET summary
-    summary(model, input_data=(data, time_steps,), depth=10)
+    summary(two_dim_model, input_data=(data, time_steps,), depth=10)
 
     # Create a test ResNet that uses CBAM Residual Convolution Blocks
-    model = res_net_fifty(test_channels, 1000, use_cbam=True)
+    two_dim_model = two_dim_res_net_fifty(test_channels, 1000, use_cbam=True)
 
     # View ResNet summary
-    summary(model, input_data=(data, time_steps,), depth=10)
+    summary(two_dim_model, input_data=(data, time_steps,), depth=10)

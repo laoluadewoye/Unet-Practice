@@ -468,3 +468,64 @@ class AvgPoolNd(nn.Module):
         final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, shape[1], high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
         return final_tensor
+
+
+class InterpolateNd(nn.Module):
+    def __init__(self, dimensions):
+        super().__init__()
+
+        # Assert dimensions is higher than three
+        assert dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
+
+        # Dimension count
+        self.dimensions = dimensions
+
+        # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
+        if self.dimensions > 4:
+            self.lower_name = f'lower_{self.dimensions - 1}'
+            setattr(self, self.lower_name, InterpolateNd(dimensions - 1))
+        else:
+            self.lower_name = 'lower'
+            setattr(
+                self, self.lower_name,
+                lambda x, size: F.interpolate(x, size=size, mode='trilinear', align_corners=False)
+            )
+
+        # Capture the last dimension left out by the lower representation
+        self.last_dim = lambda x, size: F.interpolate(x, size=size, mode='linear', align_corners=False)
+
+    def forward(self, nd_tensor, size):
+        # Get shape of tensor and shape of tensor's lower dimensions
+        shape = list(nd_tensor.shape)
+
+        # Adjust the view to merge the batch and highest dimension, then the channels, then the lower dimensions
+        lower_tensor = nd_tensor.reshape(shape[0] * shape[2], shape[1], *shape[-self.dimensions + 1:])
+
+        # Work the lower dimension
+        lower_tensor = getattr(self, self.lower_name)(lower_tensor, size[1:])
+
+        # Change everything back
+        lower_conv_tensor = lower_tensor.reshape(shape[0], shape[2], -1, *size[1:])
+
+        # Create a list from 0 to n dimensions
+        # The list should go batch, highest dimension, channels, lower dimensions
+        order = [i for i in range(self.dimensions + 2)]
+
+        # Move the channels and highest dimension behind the lower dimensions, then reduce the batch to 1 dimension
+        # First though, count how many scalars should fit into the lower-view batch dimension using the actual lower
+        #   dimensional shape
+        one_dim_count = shape[0]
+        for dim_shape in size[1:]:
+            one_dim_count *= dim_shape
+
+        one_dim_tensor = lower_conv_tensor.permute(0, *order[-self.dimensions + 1:], 2, 1)
+        one_dim_tensor = one_dim_tensor.reshape(one_dim_count, -1, shape[2])
+
+        # Work the last dimension to obtain connections between N-1D dimensions
+        one_dim_conv_tensor = self.last_dim(one_dim_tensor, size[0])
+
+        # The shape is currently batch, lower dimensions, channel, then highest dimension
+        # Reshape everything back to normal
+        final_tensor = one_dim_conv_tensor.reshape(shape[0], *size[1:], -1, size[0])
+        final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
+        return final_tensor
