@@ -316,24 +316,3 @@ class Attention(nn.Module):
                 skip_out = F.interpolate(skip_out, interpolate_shape, mode='linear')
 
         return skip_out
-
-
-if __name__ == "__main__":
-    # Sample time step data
-    sample_encoding_one = torch.rand(4, 32, 64, 64)
-    sample_encoding_one = sample_encoding_one.reshape(4, 32, -1)
-
-    # Sample embedding
-    enc_embeder = AttnPosEmbeds(32, 5000)
-    enc_embedding = enc_embeder(sample_encoding_one)
-
-    # Skip embedding
-    sample_skip = torch.rand(4, 16, 128, 128)
-    sample_skip = sample_skip.reshape(4, 16, -1)
-    skip_embeder = AttnPosEmbeds(16, 17000)
-    skip_embedding = skip_embeder(sample_skip)
-
-    # Sample attention combination
-    sample_attn_order = [AttentionOptions.QKV]
-    sample_attn = Attention(sample_attn_order, 32, skip_channels=16, use_pos=True, pos_max_len=128*128)
-    sample_attn(sample_encoding_one, sample_skip)

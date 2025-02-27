@@ -32,7 +32,7 @@ def up_output_size(input_size, input_index, kernel_size, stride, padding, dilati
 
 # Simplified version of ConvNd using this as a guide: https://github.com/pvjosue/pytorch_convNd/blob/master/convNd.py
 class ConvNd(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, kernel_size, strides, padding, dilation):
+    def __init__(self, dimensions, in_channels, out_channels, kernel_size, stride, padding, dilation):
         super().__init__()
 
         # Assert dimensions is higher than three
@@ -52,11 +52,11 @@ class ConvNd(nn.Module):
             assert len(kernel_size) == dimensions
             self.kernel_size = kernel_size
             
-        if isinstance(strides, int):
-            self.strides = (strides,) * dimensions
+        if isinstance(stride, int):
+            self.stride = (stride,) * dimensions
         else:
-            assert len(strides) == dimensions
-            self.strides = strides
+            assert len(stride) == dimensions
+            self.stride = stride
             
         if isinstance(padding, int):
             self.padding = (padding,) * dimensions
@@ -75,19 +75,19 @@ class ConvNd(nn.Module):
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, ConvNd(
                 self.dimensions - 1, self.in_channels, self.out_channels, kernel_size,
-                strides=strides, padding=padding, dilation=dilation
+                stride=stride, padding=padding, dilation=dilation
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.Conv3d(
                 in_channels=self.in_channels, out_channels=self.out_channels,
-                kernel_size=kernel_size, stride=strides, padding=padding, dilation=dilation
+                kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.Conv1d(
             in_channels=self.out_channels, out_channels=self.out_channels,
-            kernel_size=kernel_size, stride=strides, padding=padding, dilation=dilation
+            kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
         )
 
     def forward(self, nd_tensor):
@@ -103,7 +103,7 @@ class ConvNd(nn.Module):
 
         # Recalculate the output of lower dimension shapes to account for convolution
         lower_dim_shape = [down_output_size(
-            lower_dim_shape[i], i+1, self.kernel_size, stride=self.strides, padding=self.padding,
+            lower_dim_shape[i], i+1, self.kernel_size, stride=self.stride, padding=self.padding,
             dilation=self.dilation) for i in range(len(lower_dim_shape))
         ]
 
@@ -130,7 +130,7 @@ class ConvNd(nn.Module):
         # The shape is currently batch, lower dimensions, channel, then highest dimension
         # Reshape everything back to normal
         high_dim_size = down_output_size(
-            shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding, dilation=self.dilation
+            shape[2], 0, self.kernel_size, stride=self.stride, padding=self.padding, dilation=self.dilation
         )
         final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, self.out_channels, high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
@@ -138,7 +138,7 @@ class ConvNd(nn.Module):
 
 
 class ConvTransposeNd(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, kernel_size, strides, padding, dilation, output_padding):
+    def __init__(self, dimensions, in_channels, out_channels, kernel_size, stride, padding, dilation, output_padding):
         super().__init__()
 
         # Assert dimensions is higher than three
@@ -158,11 +158,11 @@ class ConvTransposeNd(nn.Module):
             assert len(kernel_size) == dimensions
             self.kernel_size = kernel_size
 
-        if isinstance(strides, int):
-            self.strides = (strides,) * dimensions
+        if isinstance(stride, int):
+            self.stride = (stride,) * dimensions
         else:
-            assert len(strides) == dimensions
-            self.strides = strides
+            assert len(stride) == dimensions
+            self.stride = stride
 
         if isinstance(padding, int):
             self.padding = (padding,) * dimensions
@@ -187,20 +187,20 @@ class ConvTransposeNd(nn.Module):
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, ConvTransposeNd(
                 self.dimensions - 1, self.in_channels, self.out_channels, kernel_size,
-                strides=strides, padding=padding, dilation=dilation, output_padding=output_padding
+                stride=stride, padding=padding, dilation=dilation, output_padding=output_padding
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.ConvTranspose3d(
                 in_channels=self.in_channels, out_channels=self.out_channels,
-                kernel_size=kernel_size, stride=strides, padding=padding, dilation=dilation,
+                kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation,
                 output_padding=output_padding
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.ConvTranspose1d(
             in_channels=self.out_channels, out_channels=self.out_channels,
-            kernel_size=kernel_size, stride=strides, padding=padding, dilation=dilation,
+            kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation,
             output_padding=output_padding
         )
 
@@ -217,7 +217,7 @@ class ConvTransposeNd(nn.Module):
 
         # Recalculate the output of lower dimension shapes to account for convolution
         lower_dim_shape = [up_output_size(
-            lower_dim_shape[i], i+1, self.kernel_size, stride=self.strides, padding=self.padding,
+            lower_dim_shape[i], i+1, self.kernel_size, stride=self.stride, padding=self.padding,
             dilation=self.dilation, output_padding=self.output_padding) for i in range(len(lower_dim_shape))
         ]
 
@@ -244,7 +244,7 @@ class ConvTransposeNd(nn.Module):
         # The shape is currently batch, lower dimensions, channel, then highest dimension
         # Reshape everything back to normal
         high_dim_size = up_output_size(
-            shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding,
+            shape[2], 0, self.kernel_size, stride=self.stride, padding=self.padding,
             dilation=self.dilation, output_padding=self.output_padding
         )
         final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, self.out_channels, high_dim_size)
@@ -279,7 +279,7 @@ class BatchNormNd(nn.Module):
 
 
 class MaxPoolNd(nn.Module):
-    def __init__(self, dimensions, kernel_size, strides, padding, dilation):
+    def __init__(self, dimensions, kernel_size, stride, padding, dilation):
         super().__init__()
 
         # Assert dimensions is higher than three
@@ -295,11 +295,11 @@ class MaxPoolNd(nn.Module):
             assert len(kernel_size) == dimensions
             self.kernel_size = kernel_size
 
-        if isinstance(strides, int):
-            self.strides = (strides,) * dimensions
+        if isinstance(stride, int):
+            self.stride = (stride,) * dimensions
         else:
-            assert len(strides) == dimensions
-            self.strides = strides
+            assert len(stride) == dimensions
+            self.stride = stride
 
         if isinstance(padding, int):
             self.padding = (padding,) * dimensions
@@ -317,17 +317,17 @@ class MaxPoolNd(nn.Module):
         if self.dimensions > 4:
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, MaxPoolNd(
-                self.dimensions - 1, kernel_size, strides, padding, dilation
+                self.dimensions - 1, kernel_size, stride, padding, dilation
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.MaxPool3d(
-                kernel_size=kernel_size, stride=strides, padding=padding, dilation=dilation
+                kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.MaxPool1d(
-            kernel_size=kernel_size, stride=strides, padding=padding, dilation=dilation
+            kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
         )
 
     def forward(self, nd_tensor):
@@ -343,7 +343,7 @@ class MaxPoolNd(nn.Module):
 
         # Recalculate the output of lower dimension shapes to account for convolution
         lower_dim_shape = [down_output_size(
-            lower_dim_shape[i], i + 1, self.kernel_size, stride=self.strides, padding=self.padding,
+            lower_dim_shape[i], i + 1, self.kernel_size, stride=self.stride, padding=self.padding,
             dilation=self.dilation) for i in range(len(lower_dim_shape))
         ]
 
@@ -370,7 +370,7 @@ class MaxPoolNd(nn.Module):
         # The shape is currently batch, lower dimensions, channel, then highest dimension
         # Reshape everything back to normal
         high_dim_size = down_output_size(
-            shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding, dilation=self.dilation
+            shape[2], 0, self.kernel_size, stride=self.stride, padding=self.padding, dilation=self.dilation
         )
         final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, shape[1], high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
@@ -378,7 +378,7 @@ class MaxPoolNd(nn.Module):
 
 
 class AvgPoolNd(nn.Module):
-    def __init__(self, dimensions, kernel_size, strides, padding):
+    def __init__(self, dimensions, kernel_size, stride, padding):
         super().__init__()
 
         # Assert dimensions is higher than three
@@ -394,11 +394,11 @@ class AvgPoolNd(nn.Module):
             assert len(kernel_size) == dimensions
             self.kernel_size = kernel_size
 
-        if isinstance(strides, int):
-            self.strides = (strides,) * dimensions
+        if isinstance(stride, int):
+            self.stride = (stride,) * dimensions
         else:
-            assert len(strides) == dimensions
-            self.strides = strides
+            assert len(stride) == dimensions
+            self.stride = stride
 
         if isinstance(padding, int):
             self.padding = (padding,) * dimensions
@@ -410,17 +410,17 @@ class AvgPoolNd(nn.Module):
         if self.dimensions > 4:
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, AvgPoolNd(
-                self.dimensions - 1, kernel_size, strides, padding
+                self.dimensions - 1, kernel_size, stride, padding
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.AvgPool3d(
-                kernel_size=kernel_size, stride=strides, padding=padding
+                kernel_size=kernel_size, stride=stride, padding=padding
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.AvgPool1d(
-            kernel_size=kernel_size, stride=strides, padding=padding
+            kernel_size=kernel_size, stride=stride, padding=padding
         )
 
     def forward(self, nd_tensor):
@@ -436,7 +436,7 @@ class AvgPoolNd(nn.Module):
 
         # Recalculate the output of lower dimension shapes to account for convolution
         lower_dim_shape = [avg_output_size(
-            lower_dim_shape[i], i + 1, self.kernel_size, stride=self.strides, padding=self.padding)
+            lower_dim_shape[i], i + 1, self.kernel_size, stride=self.stride, padding=self.padding)
             for i in range(len(lower_dim_shape))
         ]
 
@@ -463,7 +463,7 @@ class AvgPoolNd(nn.Module):
         # The shape is currently batch, lower dimensions, channel, then highest dimension
         # Reshape everything back to normal
         high_dim_size = avg_output_size(
-            shape[2], 0, self.kernel_size, stride=self.strides, padding=self.padding
+            shape[2], 0, self.kernel_size, stride=self.stride, padding=self.padding
         )
         final_tensor = one_dim_conv_tensor.reshape(shape[0], *lower_dim_shape, shape[1], high_dim_size)
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])

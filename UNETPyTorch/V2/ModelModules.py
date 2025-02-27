@@ -36,13 +36,24 @@ class ConvSet(nn.Module):
             else:
                 cur_stride = 1
 
-            # Add the convolution module
-            conv_list.append(nn.Sequential(
-                conv_function(
+            # Create the dimension-specific functions
+            if dims <= 3:
+                cur_conv_func = conv_function(
                     channel_sequence[i], channel_sequence[i+1], kernel_size=kernel_sequence[i],
                     padding=padding_sequence[i], stride=cur_stride
-                ),
-                bn_function(channel_sequence[i + 1]),
+                )
+                cur_bn_func = bn_function(channel_sequence[i + 1])
+            else:
+                cur_conv_func = conv_function(
+                    self.dimensions, channel_sequence[i], channel_sequence[i+1], kernel_size=kernel_sequence[i],
+                    padding=padding_sequence[i], stride=cur_stride, dilation=1
+                )
+                cur_bn_func = bn_function(self.dimensions, channel_sequence[i + 1])
+
+            # Add the convolution module
+            conv_list.append(nn.Sequential(
+                cur_conv_func,
+                cur_bn_func,
                 copy.deepcopy(act_function) if act_function is not None else nn.ReLU(inplace=True)
             ))
 
@@ -68,10 +79,18 @@ class ConvSet(nn.Module):
         # Optional residual modification
         self.need_res = use_residual
         if self.need_res:
-            self.res_match = nn.Sequential(
-                conv_function(channel_sequence[0], channel_sequence[-1], kernel_size=1, stride=stride),
-                bn_function(channel_sequence[-1]),
-            )
+            # Create the dimension-specific functions
+            if dims <= 3:
+                cur_conv_func = conv_function(channel_sequence[0], channel_sequence[-1], kernel_size=1, stride=stride),
+                cur_bn_func = bn_function(channel_sequence[-1]),
+            else:
+                cur_conv_func = conv_function(
+                    self.dimensions, channel_sequence[0], channel_sequence[-1], kernel_size=1, padding=0,
+                    stride=stride, dilation=1
+                )
+                cur_bn_func = bn_function(self.dimensions, channel_sequence[-1])
+
+            self.res_match = nn.Sequential(cur_conv_func, cur_bn_func)
             self.res_act = nn.ReLU(inplace=True)
         else:
             self.res_match = None
@@ -129,7 +148,11 @@ class DownSample(nn.Module):
         )
 
         # 2x2 Max Pooling to Shrink image
-        self.pool = mp_function(kernel_size=2, stride=2)
+        # Create the dimension-specific function
+        if dims <= 3:
+            self.pool = mp_function(kernel_size=2, stride=2)
+        else:
+            self.pool = mp_function(dims, kernel_size=2, stride=2, padding=0, dilation=1)
 
     def forward(self, batch, time_embed=None):
         # Channel change for skip connection
@@ -153,12 +176,19 @@ class UpSample(nn.Module):
         else:
             self.attention = None
 
+        # Create the dimension-specific functions
+        if dims <= 3:
+            cur_trans_func = conv_trans_func(channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2)
+            cur_bn_func = bn_function(channel_sequence[-1])
+        else:
+            cur_trans_func = conv_trans_func(
+                dims, channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2,
+                padding=0, dilation=1, output_padding=0
+            )
+            cur_bn_func = bn_function(dims, channel_sequence[-1])
+
         # 2x2 Upscale with channel shrinkage, plus normalization, relu activation, and dropouts
-        upscaler = [
-            conv_trans_func(channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2),
-            bn_function(channel_sequence[-1]),
-            nn.ReLU(inplace=True),
-        ]
+        upscaler = [cur_trans_func, cur_bn_func, nn.ReLU(inplace=True)]
         if up_drop_perc > 0:
             upscaler.append(nn.Dropout(up_drop_perc))
         self.upscaler = nn.Sequential(*upscaler)
@@ -187,6 +217,7 @@ class UpSample(nn.Module):
         return self.conv(combined, time_embed)
 
 
+# TODO
 class UNET(nn.Module):
     def __init__(self, in_channels, channel_list, in_layer=None, out_layer=None, data_dims=2, conv_function=nn.Conv2d,
                  bn_function=nn.BatchNorm2d, mp_function=nn.MaxPool2d, conv_trans_func=nn.ConvTranspose2d,
@@ -412,77 +443,3 @@ class ResNet(nn.Module):
         # Conduct output sequence
         batch_out = self.out_layer(batch_res)
         return batch_out
-
-
-def two_dim_transformer_unet(in_channels, attn_pos_max_len):
-    cbam_args = {
-        'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL], 'use_pos': True,
-        'pos_max_len': attn_pos_max_len
-    }
-    transformer_args = {
-        'attn_order': [AttentionOptions.QKV], 'qkv_heads': 8, 'use_pos': True,
-        'pos_max_len': attn_pos_max_len
-    }
-    return UNET(
-        in_channels=in_channels, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(),
-        denoise_diff=True, denoise_embed_count=32, up_drop_perc=0.5, up_attn_args=transformer_args,
-        conv_act_fn=nn.LeakyReLU(0.2, inplace=True), conv_attn_args=cbam_args, conv_residual=True
-    )
-
-
-def two_dim_res_net_fifty(in_channels, out_classes, use_cbam=False):
-    # Create custom input layer
-    in_layer = nn.Sequential(
-        nn.Conv2d(in_channels, 64, 7, stride=2, padding=3),
-        nn.BatchNorm2d(64),
-        nn.ReLU(inplace=True),
-        nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
-    )
-
-    # Create layer list inputs
-    lcl = [[64, 64, 64, 256], [256, 128, 128, 512], [512, 256, 256, 1024], [1024, 512, 512, 2048]]
-    lkl = [(1, 3, 1)] * 4
-    lpl = [(0, 1, 0)] * 4
-    lsl = [3, 4, 6, 3]
-
-    # Create custom output layer
-    out_layer = nn.Sequential(
-        nn.AdaptiveAvgPool2d((1, 1)),
-        nn.Flatten(),
-        nn.Linear(2048, out_classes),
-        nn.Softmax(dim=1)
-    )
-
-    # Create CBAM Attention
-    if use_cbam:
-        cbam_args = {'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL]}
-    else:
-        cbam_args = None
-
-    # Create ResNet with default 2D data handling
-    return ResNet(
-        lcl, lkl, lpl, lsl, in_layer=in_layer, out_layer=out_layer, denoise_diff=True, denoise_embed_count=32,
-        conv_attn_args=cbam_args, conv_residual=True
-    )
-
-
-if __name__ == "__main__":
-    # Set the aspect size and channels
-    test_data_size = 224
-    test_channels = 1
-    test_batch_size = 1
-
-    data = torch.randn(test_batch_size, test_channels, test_data_size, test_data_size)
-    time_steps = torch.randint(0, 300, (test_batch_size,))
-
-    # Create a test UNET that uses CBAM Residual Convolution Blocks and Up-scaling Transformer Blocks
-    two_dim_model = two_dim_transformer_unet(test_channels, test_data_size*test_data_size)
-
-    # View UNET summary
-    summary(two_dim_model, input_data=(data, time_steps,), depth=10)
-
-    # Create a test ResNet that uses CBAM Residual Convolution Blocks
-    two_dim_model = two_dim_res_net_fifty(test_channels, 1000, use_cbam=True)
-
-    # View ResNet summary
-    summary(two_dim_model, input_data=(data, time_steps,), depth=10)
