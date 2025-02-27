@@ -8,7 +8,7 @@ from EmbedAttnUtils import *
 
 class ConvSetTwo(nn.Module):
     def __init__(self, channel_sequence, kernel_sequence, padding_sequence, stride=1, act_function=None,
-                 use_time=False, time_embed_count=0, use_res=False):
+                 use_time=False, time_embed_count=0, attention_args=None, use_res=False):
         super().__init__()
 
         # Assert that the channel sequence is at least 3 items long (for double convolution)
@@ -55,6 +55,12 @@ class ConvSetTwo(nn.Module):
         else:
             self.embed_adjuster = None
 
+        # Setting attention
+        if attention_args is not None:
+            self.attention = Attention(**attention_args)
+        else:
+            self.attention = None
+
         # Optional residual modification
         self.need_res = use_res
         if self.need_res:
@@ -92,6 +98,11 @@ class ConvSetTwo(nn.Module):
         for i in range(1, len(self.conv_list)):
             conv_batch = self.conv_list[i](conv_batch)
 
+        # Apply attention if needed
+        if self.attention is not None:
+            conv_batch_attn = self.attention(conv_batch.reshape(conv_batch.shape[0], conv_batch.shape[1], -1))
+            conv_batch = conv_batch_attn.reshape(*conv_batch.shape)
+
         # Add residuals if needed
         if self.need_res:
             res_batch = self.res_match(batch)
@@ -102,13 +113,13 @@ class ConvSetTwo(nn.Module):
 
 class DownSampleTwo(nn.Module):
     def __init__(self, channel_sequence, kernel_sequence, padding_sequence, conv_act_fn=None,
-                 conv_time=False, conv_time_embed_count=0, conv_res=False):
+                 conv_time=False, conv_time_embed_count=0, conv_attn_args=None, conv_res=False):
         super().__init__()
 
         # Convolution Step
         self.conv = ConvSetTwo(
-            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn,
-            use_time=conv_time, time_embed_count=conv_time_embed_count, use_res=conv_res
+            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn, use_time=conv_time,
+            time_embed_count=conv_time_embed_count, attention_args=conv_attn_args, use_res=conv_res
         )
 
         # 2x2 Max Pooling to Shrink image
@@ -126,7 +137,7 @@ class DownSampleTwo(nn.Module):
 
 class UpSampleTwo(nn.Module):
     def __init__(self, channel_sequence, kernel_sequence, padding_sequence, up_drop_perc=0.3, attention_args=None,
-                 conv_act_fn=None, conv_time=False, conv_time_embed_count=0, conv_res=False):
+                 conv_act_fn=None, conv_time=False, conv_time_embed_count=0, conv_attn_args=None, conv_res=False):
         super().__init__()
 
         # Setting attention
@@ -147,8 +158,8 @@ class UpSampleTwo(nn.Module):
 
         # Convolution Step (assumes skip connection is present to combine long and short paths)
         self.conv = ConvSetTwo(
-            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn,
-            use_time=conv_time, time_embed_count=conv_time_embed_count, use_res=conv_res
+            channel_sequence, kernel_sequence, padding_sequence, act_function=conv_act_fn, use_time=conv_time,
+            time_embed_count=conv_time_embed_count, attention_args=conv_attn_args, use_res=conv_res
         )
 
     def forward(self, cur, skip, time_embed=None):
@@ -158,7 +169,7 @@ class UpSampleTwo(nn.Module):
                 cur.reshape(cur.shape[0], cur.shape[1], -1),
                 skip.reshape(skip.shape[0], skip.shape[1], -1)
             )
-            skip = attn_skip.reshape(skip.shape[0], skip.shape[1], skip.shape[2], skip.shape[3])
+            skip = attn_skip.reshape(*skip.shape)
 
         # Upscale encoding
         cur_upscaled = self.upscaler(cur)
@@ -170,7 +181,8 @@ class UpSampleTwo(nn.Module):
 
 class UNETTwo(nn.Module):
     def __init__(self, in_channels, channel_list, in_layer=None, out_layer=None, denoise_diff=False,
-                 denoise_embed_count=0, up_drop_perc=0.3, attention_args=None, conv_act_fn=None, conv_res=False):
+                 denoise_embed_count=0, up_drop_perc=0.3, up_attn_args=None, conv_act_fn=None, conv_attn_args=None,
+                 conv_res=False):
         super().__init__()
 
         # Set custom input layer
@@ -190,10 +202,9 @@ class UNETTwo(nn.Module):
         for i in range(len(channel_list) - 1):
             cur_in_channels = in_channels if i == 0 else channel_list[i - 1]
             cur_seq = [cur_in_channels, channel_list[i], channel_list[i]]
-            down_smap.append(DownSampleTwo(
-                cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), conv_act_fn=conv_act_fn,
-                conv_time=self.need_denoise, conv_time_embed_count=denoise_embed_count, conv_res=conv_res
-            ))
+            down_smap.append(
+                self.create_downsampler(cur_seq, conv_attn_args, conv_act_fn, denoise_embed_count, conv_res)
+            )
         self.down_samplers = nn.ModuleList(down_smap)
 
         # Create bottleneck transition and attention if needed
@@ -202,34 +213,61 @@ class UNETTwo(nn.Module):
             bn_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), act_function=conv_act_fn,
             use_time=self.need_denoise, time_embed_count=denoise_embed_count, use_res=conv_res
         )
-        if attention_args is not None:
-            attention_args['enc_channels'] = channel_list[-1]
-            attention_args['skip_channels'] = channel_list[-1]
-            attention_args['spatial_inter_channels'] = channel_list[-1] // 2
-            self.bottle_neck_attn = Attention(**attention_args)
+        if up_attn_args is not None:
+            up_attn_args['enc_channels'] = channel_list[-1]
+            up_attn_args['skip_channels'] = channel_list[-1]
+            up_attn_args['spatial_inter_channels'] = channel_list[-1] // 2
+            self.bottle_neck_attn = Attention(**up_attn_args)
         else:
             self.bottle_neck_attn = None
 
         # Create up samplers using nn.ModuleList
         up_samp = []
         for i in range(len(channel_list) - 1, 0, -1):
-            cur_attention = None
             cur_seq = [channel_list[i], channel_list[i-1], channel_list[i-1]]
-            if attention_args is not None and i > 1:
-                attention_args['enc_channels'] = channel_list[i]
-                attention_args['skip_channels'] = channel_list[i-1]
-                attention_args['spatial_inter_channels'] = channel_list[i-1]
-                cur_attention = attention_args
-
-            up_samp.append(UpSampleTwo(
-                cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), up_drop_perc=up_drop_perc,
-                attention_args=cur_attention, conv_act_fn=conv_act_fn, conv_time=self.need_denoise,
-                conv_time_embed_count=denoise_embed_count, conv_res=conv_res
+            up_samp.append(self.create_upsampler(
+                cur_seq, i, up_drop_perc, up_attn_args, conv_attn_args, conv_act_fn, denoise_embed_count, conv_res
             ))
         self.up_samplers = nn.ModuleList(up_samp)
 
         # Set custom output layer
         self.out_layer = out_layer if out_layer is not None else nn.Identity()
+
+    def create_downsampler(self, cur_seq, conv_attn_args, conv_act_fn, denoise_embed_count, conv_res):
+        cur_conv_attn = None
+        if conv_attn_args is not None:
+            conv_attn_args['enc_channels'] = cur_seq[-1]
+            conv_attn_args['skip_channels'] = cur_seq[-1]
+            conv_attn_args['spatial_inter_channels'] = cur_seq[-1] // 2
+            cur_conv_attn = conv_attn_args
+
+        return DownSampleTwo(
+            cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), conv_act_fn=conv_act_fn,
+            conv_time=self.need_denoise, conv_time_embed_count=denoise_embed_count, conv_attn_args=cur_conv_attn,
+            conv_res=conv_res
+        )
+
+    def create_upsampler(self, cur_seq, cur_index, up_drop_perc, up_attn_args, conv_attn_args, conv_act_fn,
+                         denoise_embed_count, conv_res):
+        cur_up_attn = None
+        if up_attn_args is not None and cur_index > 1:
+            up_attn_args['enc_channels'] = cur_seq[0]
+            up_attn_args['skip_channels'] = cur_seq[-1]
+            up_attn_args['spatial_inter_channels'] = cur_seq[-1]
+            cur_up_attn = up_attn_args
+
+        cur_conv_attn = None
+        if conv_attn_args is not None:
+            conv_attn_args['enc_channels'] = cur_seq[-1]
+            conv_attn_args['skip_channels'] = cur_seq[-1]
+            conv_attn_args['spatial_inter_channels'] = cur_seq[-1]
+            cur_conv_attn = conv_attn_args
+
+        return UpSampleTwo(
+            cur_seq, kernel_sequence=(3, 3), padding_sequence=(1, 1), up_drop_perc=up_drop_perc,
+            attention_args=cur_up_attn, conv_act_fn=conv_act_fn, conv_time=self.need_denoise,
+            conv_time_embed_count=denoise_embed_count, conv_attn_args=cur_conv_attn, conv_res=conv_res
+        )
 
     def forward(self, batch, time_step=None):
         # Prepare encoder
@@ -252,7 +290,7 @@ class UNETTwo(nn.Module):
         cur_up = self.bottle_neck(cur_down, time_embed)
         if self.bottle_neck_attn is not None:
             cur_up_attn = self.bottle_neck_attn(cur_up.reshape(cur_up.shape[0], cur_up.shape[1], -1))
-            cur_up = cur_up_attn.reshape(*cur_up.shape[:])
+            cur_up = cur_up_attn.reshape(*cur_up.shape)
 
         # Upsample through list
         for up_sampler in self.up_samplers:
@@ -298,15 +336,26 @@ def res_net_fifty():
 
 
 if __name__ == "__main__":
-    # Create a test UNET
-    attn_args = {
-        'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL],
-        'use_pos': True, 'pos_max_len': 64*64}
+    # Set the aspect size and channels
+    data_size = 256
+    channels = 3
+    batch_size = 1
+
+    # Create a test UNET that uses CBAM Residual Convolution Blocks and Upscaling Transformer Blocks
+    cbam_args = {
+        'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL], 'use_pos': True,
+        'pos_max_len': data_size*data_size
+    }
+    transformer_args = {
+        'attn_order': [AttentionOptions.QKV], 'qkv_heads': 8, 'use_pos': True, 'pos_max_len': data_size*data_size
+    }
     model = UNETTwo(
-        in_channels=1, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(), attention_args=attn_args,
-        up_drop_perc=0.5, conv_act_fn=nn.LeakyReLU(0.2, inplace=True), conv_res=True
+        in_channels=channels, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(), denoise_diff=True,
+        denoise_embed_count=32, up_drop_perc=0.5, up_attn_args=transformer_args,
+        conv_act_fn=nn.LeakyReLU(0.2, inplace=True), conv_attn_args=cbam_args, conv_res=True
     )
 
     # View model summary
-    print(model)
-    summary(model, input_size=(1, 1, 64, 64), depth=5)
+    data = torch.randn(batch_size, channels, data_size, data_size)
+    time_steps = torch.randint(0, 300, (batch_size,))
+    summary(model, input_data=(data, time_steps,), depth=10)

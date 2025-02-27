@@ -11,10 +11,9 @@ class DiffPosEmbeds(nn.Module):
     def __init__(self, dimensions, theta=10000):
         super().__init__()
 
-        # Make dimensions even
-        if dimensions % 2 != 0:
-            print("Warning: Dimensions not even, adding 1...")
-            dimensions += 1
+        # Assert dimensions are even
+        assert dimensions % 2 == 0, "Dimensions must be even for using sin-cosine embeddings."
+
         half_dimensions = dimensions // 2
 
         # Altered math for embeds to be precomputed and registered
@@ -35,6 +34,11 @@ class AttnPosEmbeds(nn.Module):
     def __init__(self, channels, max_seq_length, theta=10000):
         super().__init__()
 
+        # Make channels even
+        if channels % 2 != 0:
+            print("Channels must be even for using sin-cosine embeddings. Adding 1...")
+            channels += 1
+
         # Create empty embedding
         embeds = torch.zeros(channels, max_seq_length)
 
@@ -52,7 +56,7 @@ class AttnPosEmbeds(nn.Module):
         self.register_buffer('embeds', embeds.unsqueeze(0))
 
     def forward(self, flat_enc):
-        return flat_enc + self.embeds[:, :, :flat_enc.size(2)]
+        return flat_enc + self.embeds[:, :flat_enc.shape[1], :flat_enc.shape[2]]
 
 
 class ChannelAttention(nn.Module):
