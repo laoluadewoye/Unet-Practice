@@ -252,7 +252,6 @@ class QKVAttention(nn.Module):
         return skip_out_values
 
 
-@dataclass
 class AttentionOptions(StrEnum):
     CHANNEL = auto()
     SPATIAL = auto()

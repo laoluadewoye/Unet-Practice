@@ -81,8 +81,8 @@ class ConvSet(nn.Module):
         if self.need_res:
             # Create the dimension-specific functions
             if dims <= 3:
-                cur_conv_func = conv_function(channel_sequence[0], channel_sequence[-1], kernel_size=1, stride=stride),
-                cur_bn_func = bn_function(channel_sequence[-1]),
+                cur_conv_func = conv_function(channel_sequence[0], channel_sequence[-1], kernel_size=1, stride=stride)
+                cur_bn_func = bn_function(channel_sequence[-1])
             else:
                 cur_conv_func = conv_function(
                     self.dimensions, channel_sequence[0], channel_sequence[-1], kernel_size=1, padding=0,

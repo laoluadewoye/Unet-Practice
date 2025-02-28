@@ -30,6 +30,7 @@ def up_output_size(input_size, input_index, kernel_size, stride, padding, dilati
     return (input_size - 1) * s_index - 2 * p_index + d_index * (ks_index - 1) + op_index + 1
 
 
+# TODO: Use **kwargs to advantage
 # Simplified version of ConvNd using this as a guide: https://github.com/pvjosue/pytorch_convNd/blob/master/convNd.py
 class ConvNd(nn.Module):
     def __init__(self, dimensions, in_channels, out_channels, kernel_size, stride, padding, dilation):
