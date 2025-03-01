@@ -46,7 +46,7 @@ class ConvSet(nn.Module):
             else:
                 cur_conv_func = conv_function(
                     self.dimensions, channel_sequence[i], channel_sequence[i+1], kernel_size=kernel_sequence[i],
-                    padding=padding_sequence[i], stride=cur_stride, dilation=1
+                    padding=padding_sequence[i], stride=cur_stride
                 )
                 cur_bn_func = bn_function(self.dimensions, channel_sequence[i + 1])
 
@@ -87,8 +87,7 @@ class ConvSet(nn.Module):
                 cur_bn_func = bn_function(channel_sequence[-1])
             else:
                 cur_conv_func = conv_function(
-                    self.dimensions, channel_sequence[0], channel_sequence[-1], kernel_size=1, padding=0,
-                    stride=stride, dilation=1
+                    self.dimensions, channel_sequence[0], channel_sequence[-1], kernel_size=1, stride=stride
                 )
                 cur_bn_func = bn_function(self.dimensions, channel_sequence[-1])
 
@@ -154,7 +153,7 @@ class DownSample(nn.Module):
         if dims <= 3:
             self.pool = mp_function(kernel_size=2, stride=2)
         else:
-            self.pool = mp_function(dims, kernel_size=2, stride=2, padding=0, dilation=1)
+            self.pool = mp_function(dims, kernel_size=2, stride=2)
 
     def forward(self, batch, time_embed=None):
         # Channel change for skip connection
@@ -185,10 +184,7 @@ class UpSample(nn.Module):
             cur_trans_func = conv_trans_func(channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2)
             cur_bn_func = bn_function(channel_sequence[-1])
         else:
-            cur_trans_func = conv_trans_func(
-                dims, channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2,
-                padding=0, dilation=1, output_padding=0
-            )
+            cur_trans_func = conv_trans_func(dims, channel_sequence[0], channel_sequence[-1], kernel_size=2, stride=2)
             cur_bn_func = bn_function(dims, channel_sequence[-1])
 
         # 2x2 Upscale with channel shrinkage, plus normalization, relu activation, and dropouts
@@ -221,7 +217,6 @@ class UpSample(nn.Module):
         return self.conv(combined, time_embed)
 
 
-# TODO
 class UNET(nn.Module):
     def __init__(self, in_channels, channel_list, in_layer=None, out_layer=None, data_dims=2, conv_function=nn.Conv2d,
                  bn_function=nn.BatchNorm2d, mp_function=nn.MaxPool2d, conv_trans_func=nn.ConvTranspose2d,
@@ -292,10 +287,15 @@ class UNET(nn.Module):
 
     def create_downsampler(self, cur_seq, conv_attn_args, conv_act_fn, denoise_embed_count, conv_residual):
         cur_conv_attn = None
-        if conv_attn_args is not None:
+        if isinstance(conv_attn_args, dict):
             conv_attn_args['enc_channels'] = cur_seq[-1]
             conv_attn_args['skip_channels'] = cur_seq[-1]
             conv_attn_args['spatial_inter_channels'] = cur_seq[-1] // 2
+            cur_conv_attn = conv_attn_args
+        elif isinstance(conv_attn_args, AttentionArgs):
+            conv_attn_args.enc_channels = cur_seq[-1]
+            conv_attn_args.skip_channels = cur_seq[-1]
+            conv_attn_args.spatial_inter_channels = cur_seq[-1] // 2
             cur_conv_attn = conv_attn_args
 
         return DownSample(
@@ -308,17 +308,27 @@ class UNET(nn.Module):
     def create_upsampler(self, cur_seq, cur_index, up_drop_perc, up_attn_args, conv_attn_args, conv_act_fn,
                          denoise_embed_count, conv_residual):
         cur_up_attn = None
-        if up_attn_args is not None and cur_index > 1:
+        if isinstance(up_attn_args, dict) and cur_index > 1:
             up_attn_args['enc_channels'] = cur_seq[0]
             up_attn_args['skip_channels'] = cur_seq[-1]
             up_attn_args['spatial_inter_channels'] = cur_seq[-1]
             cur_up_attn = up_attn_args
+        elif isinstance(up_attn_args, AttentionArgs) and cur_index > 1:
+            up_attn_args.enc_channels = cur_seq[0]
+            up_attn_args.skip_channels = cur_seq[-1]
+            up_attn_args.spatial_inter_channels = cur_seq[-1]
+            cur_up_attn = up_attn_args
 
         cur_conv_attn = None
-        if conv_attn_args is not None:
+        if isinstance(conv_attn_args, dict):
             conv_attn_args['enc_channels'] = cur_seq[-1]
             conv_attn_args['skip_channels'] = cur_seq[-1]
             conv_attn_args['spatial_inter_channels'] = cur_seq[-1] // 2
+            cur_conv_attn = conv_attn_args
+        elif isinstance(conv_attn_args, AttentionArgs):
+            conv_attn_args.enc_channels = cur_seq[-1]
+            conv_attn_args.skip_channels = cur_seq[-1]
+            conv_attn_args.spatial_inter_channels = cur_seq[-1] // 2
             cur_conv_attn = conv_attn_args
 
         return UpSample(
