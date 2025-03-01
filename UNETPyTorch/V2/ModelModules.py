@@ -1,3 +1,6 @@
+"""
+Module for defining machine learning modules for UNET and ResNet.
+"""
 import copy
 from dataclasses import asdict
 import sys

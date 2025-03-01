@@ -1,3 +1,6 @@
+"""
+Module for defining 1-dimensional UNET modules.
+"""
 import torch
 import math
 import copy

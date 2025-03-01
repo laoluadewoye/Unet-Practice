@@ -1,3 +1,4 @@
+"""Package for Version 1 of UNETPyTorch."""
 __all__ = [
     "GeneralUNETModel", "DiffusionUNETModel",  # Wrappers
     "ConvNd", "ConvTransposeNd", "BatchNormNd", "MaxPoolNd", "AvgPoolNd", "InterpolateNd"  # Higher Dim Utilities

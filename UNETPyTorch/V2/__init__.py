@@ -1,3 +1,4 @@
+"""Package for Version 1 of UNETPyTorch."""
 __all__ = [
     'GeneralUNETModel', 'GeneralResNetModel', 'DiffusionUNETModel', 'DiffusionResNetModel',  # Wrappers
     'ResNetArgs', 'ResNetPresets',  # ResNet Settings

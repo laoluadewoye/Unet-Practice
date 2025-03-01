@@ -1,3 +1,6 @@
+"""
+Module for defining positional embeddings and attention functionality.
+"""
 from dataclasses import dataclass
 from typing import Iterable, Union
 from enum import auto, StrEnum

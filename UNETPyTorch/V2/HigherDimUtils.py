@@ -1,3 +1,6 @@
+"""
+Module for defining higher dimensional modules.
+"""
 import torch.nn as nn
 import torch.nn.functional as F
 
