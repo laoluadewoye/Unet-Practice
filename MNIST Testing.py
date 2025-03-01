@@ -1,6 +1,6 @@
 from UNETPyTorch.V1.UnetModel import GeneralUNETModel as GenUnetOne
-from UNETPyTorch.V2.ModelWrappers import GeneralUNETModel as GenUnetTwo
-from UNETPyTorch.V2.EmbedAttnUtils import AttentionOptions
+from UNETPyTorch.V2 import GeneralUNETModel as GenUnetTwo
+from UNETPyTorch.V2 import AttentionOptions
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -60,11 +60,14 @@ conv_filters = [64, 128, 256, 512]
 mnist_classes = 10
 my_out_layer = PoolSoftmaxOutput(in_channels=conv_filters[0], out_classes=mnist_classes)
 optim_loss_rate = 0.002
+
+# Version 1
 mnist_model_v1 = GenUnetOne(
     name='version_one_unet', in_dimensions=dimensions, in_channels=channels, conv_channels=conv_filters,
     out_layer=my_out_layer, use_up_atten=True, use_attn_pool=True, loss_rate=optim_loss_rate
 )
 
+# Version 2
 spatial_attn_args = {
     'attn_order': [AttentionOptions.SPATIAL]
 }

@@ -435,7 +435,7 @@ class ResNetPresets(StrEnum):
 
 
 @dataclass
-class ResNetOptions:
+class ResNetArgs:
     channel_list: Iterable[Iterable[int]]
     kernel_list: Iterable[Iterable[int]]
     padding_list: Iterable[Iterable[int]]
@@ -443,23 +443,23 @@ class ResNetOptions:
 
 
 class DiffusionResNetModel:
-    def __init__(self, name, in_channels, preset=None, preset_out_classes=0, custom_options=None, in_layer=None,
+    def __init__(self, name, in_channels, preset=None, preset_out_classes=0, custom_resnet_args=None, in_layer=None,
                  out_layer=None, data_dims=2, conv_act_fn=None, conv_attn_args=None, conv_residual=False,
                  loss_rate=0.002, time_steps=300, time_embed_count=32):
 
         # Assertion list
         assert data_dims > 0, "in_dimensions must be greater than 0."
-        assert preset is not None or custom_options is not None, (
-            "preset or custom_list_package must be specified."
+        assert preset is not None or custom_resnet_args is not None, (
+            "preset or custom_resnet_args must be specified."
         )
-        assert not (preset is not None and custom_options is not None), (
-            "preset and custom_list_package cannot both be specified."
+        assert not (preset is not None and custom_resnet_args is not None), (
+            "preset and custom_resnet_args cannot both be specified."
         )
         assert preset is not None and preset_out_classes > 1, (
             "preset_out_classes must be greater than 1 when preset is used"
         )
-        assert isinstance(custom_options, Union[ResNetOptions, None]), (
-            "custom_list_package must be an instance of ResNetPackage for safety."
+        assert isinstance(custom_resnet_args, Union[ResNetArgs, None]), (
+            "custom_resnet_args must be an instance of ResNetArgs for safety."
         )
         assert isinstance(in_layer, Union[nn.Module, None]), "in_layer must be an instance of nn.Module."
         assert isinstance(out_layer, Union[nn.Module, None]), "out_layer must be an instance of nn.Module."
@@ -539,6 +539,10 @@ class DiffusionResNetModel:
                 list_of_kernel_lists = [(1, 3, 1)] * 4
                 list_of_padding_lists = [(0, 1, 0)] * 4
                 list_of_set_counts = [3, 8, 36, 3]
+            else:
+                raise ValueError(
+                    "Preset must be one of 'resnet18', 'resnet34', 'resnet50', 'resnet101', or 'resnet152'"
+                )
 
             # Create output layer
             if out_layer is None:
@@ -548,16 +552,22 @@ class DiffusionResNetModel:
                     nn.Linear(list_of_channel_lists[-1][-1], preset_out_classes),
                     nn.Softmax(dim=1)
                 )
-        elif custom_options is not None:
-            list_of_channel_lists = custom_options.channel_list
-            list_of_kernel_lists = custom_options.kernel_list
-            list_of_padding_lists = custom_options.padding_list
-            list_of_set_counts = custom_options.set_list
+        elif custom_resnet_args is not None:
+            list_of_channel_lists = custom_resnet_args.channel_list
+            list_of_kernel_lists = custom_resnet_args.kernel_list
+            list_of_padding_lists = custom_resnet_args.padding_list
+            list_of_set_counts = custom_resnet_args.set_list
+        else:
+            list_of_channel_lists = None
+            list_of_kernel_lists = None
+            list_of_padding_lists = None
+            list_of_set_counts = None
 
         self.model = ResNet(
             list_of_channel_lists, list_of_kernel_lists, list_of_padding_lists, list_of_set_counts, in_layer=in_layer,
             out_layer=out_layer, data_dims=data_dims, conv_function=conv_function, bn_function=bn_function,
-            conv_act_fn=conv_act_fn, conv_attn_args=conv_attn_args, conv_residual=conv_residual
+            denoise_diff=True, denoise_embed_count=time_embed_count, conv_act_fn=conv_act_fn,
+            conv_attn_args=conv_attn_args, conv_residual=conv_residual
         )
         self.param_count = sum(p.numel() for p in self.model.parameters())
         self.optimizer = Adam(self.model.parameters(), lr=loss_rate)
@@ -749,23 +759,23 @@ class DiffusionResNetModel:
 
 
 class GeneralResNetModel:
-    def __init__(self, name, in_channels, preset=None, preset_out_classes=0, custom_options=None, in_layer=None,
+    def __init__(self, name, in_channels, preset=None, preset_out_classes=0, custom_resnet_args=None, in_layer=None,
                  out_layer=None, data_dims=2, conv_act_fn=None, conv_attn_args=None, conv_residual=False,
                  loss_rate=0.002):
 
         # Assertion list
         assert data_dims > 0, "in_dimensions must be greater than 0."
-        assert preset is not None or custom_options is not None, (
-            "preset or custom_list_package must be specified."
+        assert preset is not None or custom_resnet_args is not None, (
+            "preset or custom_resnet_args must be specified."
         )
-        assert not (preset is not None and custom_options is not None), (
-            "preset and custom_list_package cannot both be specified."
+        assert not (preset is not None and custom_resnet_args is not None), (
+            "preset and custom_resnet_args cannot both be specified."
         )
         assert preset is not None and preset_out_classes > 1, (
             "preset_out_classes must be greater than 1 when preset is used"
         )
-        assert isinstance(custom_options, Union[ResNetOptions, None]), (
-            "custom_list_package must be an instance of ResNetPackage for safety."
+        assert isinstance(custom_resnet_args, Union[ResNetArgs, None]), (
+            "custom_resnet_args must be an instance of ResNetArgs for safety."
         )
         assert isinstance(in_layer, Union[nn.Module, None]), "in_layer must be an instance of nn.Module."
         assert isinstance(out_layer, Union[nn.Module, None]), "out_layer must be an instance of nn.Module."
@@ -845,6 +855,10 @@ class GeneralResNetModel:
                 list_of_kernel_lists = [(1, 3, 1)] * 4
                 list_of_padding_lists = [(0, 1, 0)] * 4
                 list_of_set_counts = [3, 8, 36, 3]
+            else:
+                raise ValueError(
+                    "Preset must be one of 'resnet18', 'resnet34', 'resnet50', 'resnet101', or 'resnet152'"
+                )
 
             # Create output layer
             if out_layer is None:
@@ -854,11 +868,16 @@ class GeneralResNetModel:
                     nn.Linear(list_of_channel_lists[-1][-1], preset_out_classes),
                     nn.Softmax(dim=1)
                 )
-        elif custom_options is not None:
-            list_of_channel_lists = custom_options.channel_list
-            list_of_kernel_lists = custom_options.kernel_list
-            list_of_padding_lists = custom_options.padding_list
-            list_of_set_counts = custom_options.set_list
+        elif custom_resnet_args is not None:
+            list_of_channel_lists = custom_resnet_args.channel_list
+            list_of_kernel_lists = custom_resnet_args.kernel_list
+            list_of_padding_lists = custom_resnet_args.padding_list
+            list_of_set_counts = custom_resnet_args.set_list
+        else:
+            list_of_channel_lists = None
+            list_of_kernel_lists = None
+            list_of_padding_lists = None
+            list_of_set_counts = None
 
         self.model = ResNet(
             list_of_channel_lists, list_of_kernel_lists, list_of_padding_lists, list_of_set_counts, in_layer=in_layer,
@@ -1013,10 +1032,9 @@ def res_net_fifty(in_channels, spatial_dims, out_classes, use_cbam=False):
         cbam_args = None
 
     # Create ResNet with default 2D data handling
-    return GeneralResNetModel(
-        'sample_model', in_channels, preset=ResNetPresets.RESNET18, preset_out_classes=out_classes,
-        data_dims=spatial_dims, conv_attn_args=cbam_args, conv_residual=True
-    )
+    return GeneralResNetModel('sample_model', in_channels, preset=ResNetPresets.RESNET18,
+                              preset_out_classes=out_classes, data_dims=spatial_dims, conv_attn_args=cbam_args,
+                              conv_residual=True)
 
 
 if __name__ == "__main__":
@@ -1026,8 +1044,8 @@ if __name__ == "__main__":
     test_channels = 1
     test_batch_size = 1
 
-    data = torch.randn(test_batch_size, test_channels, *([test_data_size] * test_data_dim))
-    time_steps = torch.randint(0, 300, (test_batch_size,))
+    test_data = torch.randn(test_batch_size, test_channels, *([test_data_size] * test_data_dim))
+    test_time_steps = torch.randint(0, 300, (test_batch_size,))
 
     # Create a test UNET that uses CBAM Residual Convolution Blocks and Up-scaling Transformer Blocks
     var_dim_model = transformer_unet(test_channels, test_data_dim, test_data_size**test_data_dim)
