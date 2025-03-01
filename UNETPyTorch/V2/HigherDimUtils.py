@@ -29,8 +29,6 @@ def up_output_size(input_size, input_index, kernel_size, stride, padding, dilati
     return (input_size - 1) * s_index - 2 * p_index + d_index * (ks_index - 1) + op_index + 1
 
 
-# TODO: Add assert fail messages
-# TODO: Inspect all uses of reshape
 # Simplified version of ConvNd using this as a guide: https://github.com/pvjosue/pytorch_convNd/blob/master/convNd.py
 class ConvNd(nn.Module):
     def __init__(self, dimensions, in_channels, out_channels, **kwargs):
@@ -49,25 +47,25 @@ class ConvNd(nn.Module):
         if isinstance(self.kernel_size, int):
             self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(self.kernel_size) == dimensions
+            assert len(self.kernel_size) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.stride = kwargs.get('stride', 1)
         if isinstance(self.stride, int):
             self.stride = (self.stride,) * dimensions
         else:
-            assert len(self.stride) == dimensions
+            assert len(self.stride) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.padding = kwargs.get('padding', 0)
         if isinstance(self.padding, int):
             self.padding = (self.padding,) * dimensions
         else:
-            assert len(self.padding) == dimensions
+            assert len(self.padding) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.dilation = kwargs.get('dilation', 1)
         if isinstance(self.dilation, int):
             self.dilation = (self.dilation,) * dimensions
         else:
-            assert len(self.dilation) == dimensions
+            assert len(self.dilation) == dimensions, "Passed tuple is not the same length as dimensions"
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:
@@ -153,31 +151,31 @@ class ConvTransposeNd(nn.Module):
         if isinstance(self.kernel_size, int):
             self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(self.kernel_size) == dimensions
+            assert len(self.kernel_size) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.stride = kwargs.get('stride', 1)
         if isinstance(self.stride, int):
             self.stride = (self.stride,) * dimensions
         else:
-            assert len(self.stride) == dimensions
+            assert len(self.stride) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.padding = kwargs.get('padding', 0)
         if isinstance(self.padding, int):
             self.padding = (self.padding,) * dimensions
         else:
-            assert len(self.padding) == dimensions
+            assert len(self.padding) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.dilation = kwargs.get('dilation', 1)
         if isinstance(self.dilation, int):
             self.dilation = (self.dilation,) * dimensions
         else:
-            assert len(self.dilation) == dimensions
+            assert len(self.dilation) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.output_padding = kwargs.get('output_padding', 0)
         if isinstance(self.output_padding, int):
             self.output_padding = (self.output_padding,) * dimensions
         else:
-            assert len(self.output_padding) == dimensions
+            assert len(self.output_padding) == dimensions, "Passed tuple is not the same length as dimensions"
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:
@@ -289,25 +287,25 @@ class MaxPoolNd(nn.Module):
         if isinstance(self.kernel_size, int):
             self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(self.kernel_size) == dimensions
+            assert len(self.kernel_size) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.stride = kwargs.get('stride', 1)
         if isinstance(self.stride, int):
             self.stride = (self.stride,) * dimensions
         else:
-            assert len(self.stride) == dimensions
+            assert len(self.stride) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.padding = kwargs.get('padding', 0)
         if isinstance(self.padding, int):
             self.padding = (self.padding,) * dimensions
         else:
-            assert len(self.padding) == dimensions
+            assert len(self.padding) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.dilation = kwargs.get('dilation', 1)
         if isinstance(self.dilation, int):
             self.dilation = (self.dilation,) * dimensions
         else:
-            assert len(self.dilation) == dimensions
+            assert len(self.dilation) == dimensions, "Passed tuple is not the same length as dimensions"
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:
@@ -389,19 +387,19 @@ class AvgPoolNd(nn.Module):
         if isinstance(self.kernel_size, int):
             self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(self.kernel_size) == dimensions
+            assert len(self.kernel_size) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.stride = kwargs.get('stride', 1)
         if isinstance(self.stride, int):
             self.stride = (self.stride,) * dimensions
         else:
-            assert len(self.stride) == dimensions
+            assert len(self.stride) == dimensions, "Passed tuple is not the same length as dimensions"
 
         self.padding = kwargs.get('padding', 0)
         if isinstance(self.padding, int):
             self.padding = (self.padding,) * dimensions
         else:
-            assert len(self.padding) == dimensions
+            assert len(self.padding) == dimensions, "Passed tuple is not the same length as dimensions"
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:

@@ -974,10 +974,11 @@ class GeneralResNetModel:
 
 
 def transformer_unet(in_channels, spatial_dims, attn_pos_max_len):
-    cbam_args = {
-        'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL], 'use_pos': True,
-        'pos_max_len': attn_pos_max_len
-    }
+    cbam_args = AttentionArgs(
+        attn_order=[AttentionOptions.CHANNEL, AttentionOptions.SPATIAL],
+        use_pos=True,
+        pos_max_len=attn_pos_max_len
+    )
     transformer_args = {
         'attn_order': [AttentionOptions.QKV], 'qkv_heads': 2, 'use_pos': True,
         'pos_max_len': attn_pos_max_len
@@ -1005,8 +1006,8 @@ def res_net_fifty(in_channels, spatial_dims, out_classes, use_cbam=False):
 
 if __name__ == "__main__":
     # Set the aspect size and channels
-    test_data_size = 64
-    test_data_dim = 2
+    test_data_size = 16
+    test_data_dim = 4
     test_channels = 1
     test_batch_size = 1
 
@@ -1014,13 +1015,13 @@ if __name__ == "__main__":
     time_steps = torch.randint(0, 300, (test_batch_size,))
 
     # Create a test UNET that uses CBAM Residual Convolution Blocks and Up-scaling Transformer Blocks
-    four_dim_model = transformer_unet(test_channels, test_data_dim, test_data_size**test_data_dim)
+    var_dim_model = transformer_unet(test_channels, test_data_dim, test_data_size**test_data_dim)
 
     # View UNET summary
-    summary(four_dim_model.model, input_data=data, depth=10, device=torch.device("cuda"))
+    summary(var_dim_model.model, input_data=data, depth=10, device=torch.device("cuda"))
 
-    # Create a test ResNet that uses CBAM Residual Convolution Blocks
-    four_dim_model = res_net_fifty(test_channels, test_data_dim, 10, use_cbam=True)
-
-    # View ResNet summary
-    summary(four_dim_model.model, input_data=data, depth=10, device=torch.device("cuda"))
+    # # Create a test ResNet that uses CBAM Residual Convolution Blocks
+    # four_dim_model = res_net_fifty(test_channels, test_data_dim, 10, use_cbam=True)
+    #
+    # # View ResNet summary
+    # summary(four_dim_model.model, input_data=data, depth=10, device=torch.device("cuda"))
