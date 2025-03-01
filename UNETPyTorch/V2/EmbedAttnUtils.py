@@ -271,7 +271,6 @@ class AttentionArgs:
     pos_max_len: int = 0
 
 
-# TODO: Create Attention Params class just like ResNet
 class Attention(nn.Module):
     def __init__(self, attn_order, enc_channels, skip_channels=None, channel_ratio=8, spatial_inter_channels=None,
                  qkv_heads=1, use_pos=False, pos_max_len=0):

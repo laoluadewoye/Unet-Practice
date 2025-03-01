@@ -92,7 +92,10 @@ class DiffusionUNETModel:
         self.posterior_variance = self.beta_schedule * (1.0 - a_s_cum_product_shift) / (1.0 - a_s_cum_product)
 
     def __str__(self):
-        return f"{self.model_name}\n{self.dimension_count}-Dimension UNET\n------------------------\n\n{self.model}\n"
+        title = f"{self.model_name}\n{self.dimension_count}-Dimensional UNET\n------------------------\n\n"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_summary = f"{summary(self.model, depth=10, device=device)}\n"
+        return title + model_summary
 
     @staticmethod
     def linear_beta_schedule(time_steps, start=0.0001, end=0.02):
@@ -307,7 +310,10 @@ class GeneralUNETModel:
         self.optimizer = Adam(self.model.parameters(), lr=loss_rate)
 
     def __str__(self):
-        return f"{self.model_name}\n{self.dimension_count}-Dimension UNET\n------------------------\n\n{self.model}\n"
+        title = f"{self.model_name}\n{self.dimension_count}-Dimensional UNET\n------------------------\n\n"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_summary = f"{summary(self.model, depth=10, device=device)}\n"
+        return title + model_summary
 
     def train_model(self, train_loader, epochs, loss_func, print_interval) -> pd.DataFrame:
         # Create training output folder if needed
@@ -484,13 +490,15 @@ class DiffusionResNetModel:
             if in_layer is None:
                 # Create dimension-specific input layer features
                 if self.dimension_count <= 3:
-                    input_conv = conv_function(in_channels, 64, 7, stride=2, padding=3)
+                    input_conv = conv_function(in_channels, 64, kernel_size=7, stride=2, padding=3)
                     input_batch = bn_function(64)
                     input_max_pool = mp_function(kernel_size=3, stride=2, padding=1)
                 else:
-                    input_conv = conv_function(self.dimension_count, in_channels, 64, 7, stride=2, padding=3, dilation=1)
+                    input_conv = conv_function(
+                        self.dimension_count, in_channels, 64, kernel_size=7, stride=2, padding=3
+                    )
                     input_batch = bn_function(self.dimension_count, 64)
-                    input_max_pool = mp_function(self.dimension_count, kernel_size=3, stride=2, padding=1, dilation=1)
+                    input_max_pool = mp_function(self.dimension_count, kernel_size=3, stride=2, padding=1)
 
                 # Create input layer
                 in_layer = nn.Sequential(input_conv, input_batch, nn.ReLU(inplace=True), input_max_pool)
@@ -575,7 +583,10 @@ class DiffusionResNetModel:
         self.posterior_variance = self.beta_schedule * (1.0 - a_s_cum_product_shift) / (1.0 - a_s_cum_product)
 
     def __str__(self):
-        return f"{self.model_name}\n{self.dimension_count}-Dimension UNET\n------------------------\n\n{self.model}\n"
+        title = f"{self.model_name}\n{self.dimension_count}-Dimensional UNET\n------------------------\n\n"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_summary = f"{summary(self.model, depth=10, device=device)}\n"
+        return title + model_summary
 
     @staticmethod
     def linear_beta_schedule(time_steps, start=0.0001, end=0.02):
@@ -785,14 +796,15 @@ class GeneralResNetModel:
             if in_layer is None:
                 # Create dimension-specific input layer features
                 if self.dimension_count <= 3:
-                    input_conv = conv_function(in_channels, 64, 7, stride=2, padding=3)
+                    input_conv = conv_function(in_channels, 64, kernel_size=7, stride=2, padding=3)
                     input_batch = bn_function(64)
                     input_max_pool = mp_function(kernel_size=3, stride=2, padding=1)
                 else:
-                    input_conv = conv_function(self.dimension_count, in_channels, 64, 7, stride=2, padding=3,
-                                               dilation=1)
+                    input_conv = conv_function(
+                        self.dimension_count, in_channels, 64, kernel_size=7, stride=2, padding=3,
+                    )
                     input_batch = bn_function(self.dimension_count, 64)
-                    input_max_pool = mp_function(self.dimension_count, kernel_size=3, stride=2, padding=1, dilation=1)
+                    input_max_pool = mp_function(self.dimension_count, kernel_size=3, stride=2, padding=1)
 
                 # Create input layer
                 in_layer = nn.Sequential(input_conv, input_batch, nn.ReLU(inplace=True), input_max_pool)
@@ -860,7 +872,10 @@ class GeneralResNetModel:
         self.optimizer = Adam(self.model.parameters(), lr=loss_rate)
 
     def __str__(self):
-        return f"{self.model_name}\n{self.dimension_count}-Dimension ResNet\n------------------------\n\n{self.model}\n"
+        title = f"{self.model_name}\n{self.dimension_count}-Dimensional UNET\n------------------------\n\n"
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model_summary = f"{summary(self.model, depth=10, device=device)}\n"
+        return title + model_summary
 
     def train_model(self, train_loader, epochs, loss_func, print_interval) -> pd.DataFrame:
         # Create training output folder if needed
@@ -1018,10 +1033,10 @@ if __name__ == "__main__":
     var_dim_model = transformer_unet(test_channels, test_data_dim, test_data_size**test_data_dim)
 
     # View UNET summary
-    summary(var_dim_model.model, input_data=data, depth=10, device=torch.device("cuda"))
+    print(var_dim_model)
 
-    # # Create a test ResNet that uses CBAM Residual Convolution Blocks
-    # four_dim_model = res_net_fifty(test_channels, test_data_dim, 10, use_cbam=True)
-    #
-    # # View ResNet summary
-    # summary(four_dim_model.model, input_data=data, depth=10, device=torch.device("cuda"))
+    # Create a test ResNet that uses CBAM Residual Convolution Blocks
+    var_dim_model = res_net_fifty(test_channels, test_data_dim, 10, use_cbam=True)
+
+    # View UNET summary
+    print(var_dim_model)
