@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -30,65 +29,64 @@ def up_output_size(input_size, input_index, kernel_size, stride, padding, dilati
     return (input_size - 1) * s_index - 2 * p_index + d_index * (ks_index - 1) + op_index + 1
 
 
-# TODO: Use **kwargs to advantage
+# TODO: Add assert fail messages
+# TODO: Inspect all uses of reshape
 # Simplified version of ConvNd using this as a guide: https://github.com/pvjosue/pytorch_convNd/blob/master/convNd.py
 class ConvNd(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, kernel_size, stride, padding, dilation):
+    def __init__(self, dimensions, in_channels, out_channels, **kwargs):
         super().__init__()
 
         # Assert dimensions is higher than three
-        assert dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
-
-        # Dimension count
         self.dimensions = dimensions
+        assert self.dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
 
         # Things to feed into the Conv block
         self.in_channels = in_channels
         self.out_channels = out_channels
 
         # Convert int inputs to tuples
-        if isinstance(kernel_size, int):
-            self.kernel_size = (kernel_size,) * dimensions
+        self.kernel_size = kwargs.get('kernel_size', 1)
+        if isinstance(self.kernel_size, int):
+            self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(kernel_size) == dimensions
-            self.kernel_size = kernel_size
-            
-        if isinstance(stride, int):
-            self.stride = (stride,) * dimensions
+            assert len(self.kernel_size) == dimensions
+
+        self.stride = kwargs.get('stride', 1)
+        if isinstance(self.stride, int):
+            self.stride = (self.stride,) * dimensions
         else:
-            assert len(stride) == dimensions
-            self.stride = stride
-            
-        if isinstance(padding, int):
-            self.padding = (padding,) * dimensions
+            assert len(self.stride) == dimensions
+
+        self.padding = kwargs.get('padding', 0)
+        if isinstance(self.padding, int):
+            self.padding = (self.padding,) * dimensions
         else:
-            assert len(padding) == dimensions
-            self.padding = padding
-            
-        if isinstance(dilation, int):
-            self.dilation = (dilation,) * dimensions
+            assert len(self.padding) == dimensions
+
+        self.dilation = kwargs.get('dilation', 1)
+        if isinstance(self.dilation, int):
+            self.dilation = (self.dilation,) * dimensions
         else:
-            assert len(dilation) == dimensions
-            self.dilation = dilation
+            assert len(self.dilation) == dimensions
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, ConvNd(
-                self.dimensions - 1, self.in_channels, self.out_channels, kernel_size,
-                stride=stride, padding=padding, dilation=dilation
+                self.dimensions - 1, self.in_channels, self.out_channels, kernel_size=self.kernel_size[1:],
+                stride=self.stride[1:], padding=self.padding[1:], dilation=self.dilation[1:]
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.Conv3d(
-                in_channels=self.in_channels, out_channels=self.out_channels,
-                kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
+                in_channels=self.in_channels, out_channels=self.out_channels, kernel_size=self.kernel_size[1:],
+                stride=self.stride[1:], padding=self.padding[1:], dilation=self.dilation[1:]
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.Conv1d(
-            in_channels=self.out_channels, out_channels=self.out_channels,
-            kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
+            in_channels=self.out_channels, out_channels=self.out_channels, kernel_size=self.kernel_size[0],
+            stride=self.stride[0], padding=self.padding[0], dilation=self.dilation[0]
         )
 
     def forward(self, nd_tensor):
@@ -139,70 +137,69 @@ class ConvNd(nn.Module):
 
 
 class ConvTransposeNd(nn.Module):
-    def __init__(self, dimensions, in_channels, out_channels, kernel_size, stride, padding, dilation, output_padding):
+    def __init__(self, dimensions, in_channels, out_channels, **kwargs):
         super().__init__()
 
         # Assert dimensions is higher than three
-        assert dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
-
-        # Dimension count
         self.dimensions = dimensions
+        assert self.dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
 
-        # Things to feed into the Conv Transpose block
+        # Things to feed into the Conv block
         self.in_channels = in_channels
         self.out_channels = out_channels
 
         # Convert int inputs to tuples
-        if isinstance(kernel_size, int):
-            self.kernel_size = (kernel_size,) * dimensions
+        self.kernel_size = kwargs.get('kernel_size', 1)
+        if isinstance(self.kernel_size, int):
+            self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(kernel_size) == dimensions
-            self.kernel_size = kernel_size
+            assert len(self.kernel_size) == dimensions
 
-        if isinstance(stride, int):
-            self.stride = (stride,) * dimensions
+        self.stride = kwargs.get('stride', 1)
+        if isinstance(self.stride, int):
+            self.stride = (self.stride,) * dimensions
         else:
-            assert len(stride) == dimensions
-            self.stride = stride
+            assert len(self.stride) == dimensions
 
-        if isinstance(padding, int):
-            self.padding = (padding,) * dimensions
+        self.padding = kwargs.get('padding', 0)
+        if isinstance(self.padding, int):
+            self.padding = (self.padding,) * dimensions
         else:
-            assert len(padding) == dimensions
-            self.padding = padding
+            assert len(self.padding) == dimensions
 
-        if isinstance(dilation, int):
-            self.dilation = (dilation,) * dimensions
+        self.dilation = kwargs.get('dilation', 1)
+        if isinstance(self.dilation, int):
+            self.dilation = (self.dilation,) * dimensions
         else:
-            assert len(dilation) == dimensions
-            self.dilation = dilation
+            assert len(self.dilation) == dimensions
 
-        if isinstance(output_padding, int):
-            self.output_padding = (output_padding,) * dimensions
+        self.output_padding = kwargs.get('output_padding', 0)
+        if isinstance(self.output_padding, int):
+            self.output_padding = (self.output_padding,) * dimensions
         else:
-            assert len(output_padding) == dimensions
-            self.output_padding = output_padding
+            assert len(self.output_padding) == dimensions
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, ConvTransposeNd(
-                self.dimensions - 1, self.in_channels, self.out_channels, kernel_size,
-                stride=stride, padding=padding, dilation=dilation, output_padding=output_padding
+                self.dimensions - 1, self.in_channels, self.out_channels, kernel_size=self.kernel_size[1:],
+                stride=self.stride[1:], padding=self.padding[1:], dilation=self.dilation[1:],
+                output_padding=self.output_padding[1:]
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.ConvTranspose3d(
-                in_channels=self.in_channels, out_channels=self.out_channels,
-                kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation,
-                output_padding=output_padding
+                in_channels=self.in_channels, out_channels=self.out_channels, kernel_size=self.kernel_size[1:],
+                stride=self.stride[1:], padding=self.padding[1:], dilation=self.dilation[1:],
+                output_padding=self.output_padding[1:]
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.ConvTranspose1d(
-            in_channels=self.out_channels, out_channels=self.out_channels,
-            kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation,
-            output_padding=output_padding
+            in_channels=self.out_channels, out_channels=self.out_channels, kernel_size=self.kernel_size[0],
+            stride=self.stride[0], padding=self.padding[0], dilation=self.dilation[0],
+            output_padding=self.output_padding[0]
         )
 
     def forward(self, nd_tensor):
@@ -258,9 +255,9 @@ class BatchNormNd(nn.Module):
         super().__init__()
 
         # Assert dimensions is higher than three
-        assert dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
-
         self.dimensions = dimensions
+        assert self.dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
+
         self.out_channels = out_channels
         self.norm = nn.BatchNorm1d(self.out_channels)
 
@@ -280,55 +277,56 @@ class BatchNormNd(nn.Module):
 
 
 class MaxPoolNd(nn.Module):
-    def __init__(self, dimensions, kernel_size, stride, padding, dilation):
+    def __init__(self, dimensions, **kwargs):
         super().__init__()
 
         # Assert dimensions is higher than three
-        assert dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
-
-        # Dimension count
         self.dimensions = dimensions
+        assert self.dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
 
         # Convert int inputs to tuples
-        if isinstance(kernel_size, int):
-            self.kernel_size = (kernel_size,) * dimensions
+        self.kernel_size = kwargs.get('kernel_size', 1)
+        if isinstance(self.kernel_size, int):
+            self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(kernel_size) == dimensions
-            self.kernel_size = kernel_size
+            assert len(self.kernel_size) == dimensions
 
-        if isinstance(stride, int):
-            self.stride = (stride,) * dimensions
+        self.stride = kwargs.get('stride', 1)
+        if isinstance(self.stride, int):
+            self.stride = (self.stride,) * dimensions
         else:
-            assert len(stride) == dimensions
-            self.stride = stride
+            assert len(self.stride) == dimensions
 
-        if isinstance(padding, int):
-            self.padding = (padding,) * dimensions
+        self.padding = kwargs.get('padding', 0)
+        if isinstance(self.padding, int):
+            self.padding = (self.padding,) * dimensions
         else:
-            assert len(padding) == dimensions
-            self.padding = padding
+            assert len(self.padding) == dimensions
 
-        if isinstance(dilation, int):
-            self.dilation = (dilation,) * dimensions
+        self.dilation = kwargs.get('dilation', 1)
+        if isinstance(self.dilation, int):
+            self.dilation = (self.dilation,) * dimensions
         else:
-            assert len(dilation) == dimensions
-            self.dilation = dilation
+            assert len(self.dilation) == dimensions
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, MaxPoolNd(
-                self.dimensions - 1, kernel_size, stride, padding, dilation
+                self.dimensions - 1, kernel_size=self.kernel_size[1:], stride=self.stride[1:],
+                padding=self.padding[1:], dilation=self.dilation[1:]
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.MaxPool3d(
-                kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
+                kernel_size=self.kernel_size[1:], stride=self.stride[1:], padding=self.padding[1:],
+                dilation=self.dilation[1:]
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.MaxPool1d(
-            kernel_size=kernel_size, stride=stride, padding=padding, dilation=dilation
+            kernel_size=self.kernel_size[0], stride=self.stride[0], padding=self.padding[0],
+            dilation=self.dilation[0]
         )
 
     def forward(self, nd_tensor):
@@ -379,49 +377,47 @@ class MaxPoolNd(nn.Module):
 
 
 class AvgPoolNd(nn.Module):
-    def __init__(self, dimensions, kernel_size, stride, padding):
+    def __init__(self, dimensions, **kwargs):
         super().__init__()
 
         # Assert dimensions is higher than three
-        assert dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
-
-        # Dimension count
         self.dimensions = dimensions
+        assert self.dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
 
         # Convert int inputs to tuples
-        if isinstance(kernel_size, int):
-            self.kernel_size = (kernel_size,) * dimensions
+        self.kernel_size = kwargs.get('kernel_size', 1)
+        if isinstance(self.kernel_size, int):
+            self.kernel_size = (self.kernel_size,) * dimensions
         else:
-            assert len(kernel_size) == dimensions
-            self.kernel_size = kernel_size
+            assert len(self.kernel_size) == dimensions
 
-        if isinstance(stride, int):
-            self.stride = (stride,) * dimensions
+        self.stride = kwargs.get('stride', 1)
+        if isinstance(self.stride, int):
+            self.stride = (self.stride,) * dimensions
         else:
-            assert len(stride) == dimensions
-            self.stride = stride
+            assert len(self.stride) == dimensions
 
-        if isinstance(padding, int):
-            self.padding = (padding,) * dimensions
+        self.padding = kwargs.get('padding', 0)
+        if isinstance(self.padding, int):
+            self.padding = (self.padding,) * dimensions
         else:
-            assert len(padding) == dimensions
-            self.padding = padding
+            assert len(self.padding) == dimensions
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:
             self.lower_name = f'lower_{self.dimensions - 1}'
             setattr(self, self.lower_name, AvgPoolNd(
-                self.dimensions - 1, kernel_size, stride, padding
+                self.dimensions - 1, kernel_size=self.kernel_size[1:], stride=self.stride[1:], padding=self.padding[1:]
             ))
         else:
             self.lower_name = 'lower'
             setattr(self, self.lower_name, nn.AvgPool3d(
-                kernel_size=kernel_size, stride=stride, padding=padding
+                kernel_size=self.kernel_size[1:], stride=self.stride[1:], padding=self.padding[1:]
             ))
 
         # Capture the last dimension left out by the lower representation
         self.last_dim = nn.AvgPool1d(
-            kernel_size=kernel_size, stride=stride, padding=padding
+            kernel_size=self.kernel_size[0], stride=self.stride[0], padding=self.padding[0]
         )
 
     def forward(self, nd_tensor):
@@ -476,10 +472,8 @@ class InterpolateNd(nn.Module):
         super().__init__()
 
         # Assert dimensions is higher than three
-        assert dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
-
-        # Dimension count
         self.dimensions = dimensions
+        assert self.dimensions > 3, "This block is only for cases where the dimensions are higher than 3."
 
         # Lower dimension representation through recursion until hitting 4D, then just 3D + 1D.
         if self.dimensions > 4:

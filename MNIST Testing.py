@@ -1,4 +1,6 @@
-from UNETPyTorch.V1.UnetModel import GeneralUNETModel
+from UNETPyTorch.V1.UnetModel import GeneralUNETModel as GenUnetOne
+from UNETPyTorch.V2.ModelWrappers import GeneralUNETModel as GenUnetTwo
+from UNETPyTorch.V2.EmbedAttnUtils import AttentionOptions
 
 import torch.nn as nn
 import torch.nn.functional as F
@@ -51,28 +53,41 @@ plt.imshow(first_image.squeeze(), cmap='gray')  # MNIST is single-channel, using
 plt.title(f"Label: {first_label}")
 plt.show()
 
-# Create the model to use
+# Create different model versions
 dimensions = 2
 channels = 1
 conv_filters = [64, 128, 256, 512]
 mnist_classes = 10
 my_out_layer = PoolSoftmaxOutput(in_channels=conv_filters[0], out_classes=mnist_classes)
 optim_loss_rate = 0.002
-mnist_model = GeneralUNETModel(
-    name='unet_attention_mnist_model', in_dimensions=dimensions, in_channels=channels, conv_channels=conv_filters,
+mnist_model_v1 = GenUnetOne(
+    name='version_one_unet', in_dimensions=dimensions, in_channels=channels, conv_channels=conv_filters,
     out_layer=my_out_layer, use_up_atten=True, use_attn_pool=True, loss_rate=optim_loss_rate
 )
 
-# Train the model
+spatial_attn_args = {
+    'attn_order': [AttentionOptions.SPATIAL]
+}
+mnist_model_v2 = GenUnetTwo(
+    name='version_two_unet', in_channels=channels, channel_list=conv_filters, out_layer=my_out_layer,
+    data_dims=dimensions, up_attn_args=spatial_attn_args, loss_rate=optim_loss_rate
+)
+
+# Train the models
 epoch_count = 1
 print_count = 100
 print_interval = max(1, len(train_loader) // print_count)
 loss_module = nn.CrossEntropyLoss()
-model_train_stats = mnist_model.train_model(
+model_train_stats_one = mnist_model_v1.train_model(
     train_loader=train_loader, epochs=epoch_count, loss_func=loss_module, print_interval=print_interval
 )
-print(model_train_stats)
+print(model_train_stats_one)
+model_train_stats_two = mnist_model_v2.train_model(
+    train_loader=train_loader, epochs=epoch_count, loss_func=loss_module, print_interval=print_interval
+)
+print(model_train_stats_two)
 
-# Test the model
+# Test the models
 loss_module = nn.CrossEntropyLoss()
-mnist_model.test_model(test_loader=test_loader, loss_func=loss_module)
+mnist_model_v1.test_model(test_loader=test_loader, loss_func=loss_module)
+mnist_model_v2.test_model(test_loader=test_loader, loss_func=loss_module)

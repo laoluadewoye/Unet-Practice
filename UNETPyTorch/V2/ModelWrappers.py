@@ -2,6 +2,7 @@ import shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import torch
 from torch.optim import Adam
 from torchvision import transforms
 from torchinfo import summary
@@ -12,7 +13,7 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from HigherDimUtils import *
-from EmbedAttnUtils import AttentionOptions
+from EmbedAttnUtils import AttentionOptions, AttentionArgs
 from ModelModules import UNET, ResNet
 
 
@@ -989,9 +990,9 @@ def transformer_unet(in_channels, spatial_dims, attn_pos_max_len):
 
 
 def res_net_fifty(in_channels, spatial_dims, out_classes, use_cbam=False):
-    # Create CBAM Attention
+    # Create CBAM Attention, this time using a attnargs class
     if use_cbam:
-        cbam_args = {'attn_order': [AttentionOptions.CHANNEL, AttentionOptions.SPATIAL]}
+        cbam_args = AttentionArgs(attn_order=[AttentionOptions.CHANNEL, AttentionOptions.SPATIAL])
     else:
         cbam_args = None
 
@@ -1004,8 +1005,8 @@ def res_net_fifty(in_channels, spatial_dims, out_classes, use_cbam=False):
 
 if __name__ == "__main__":
     # Set the aspect size and channels
-    test_data_size = 48
-    test_data_dim = 4
+    test_data_size = 64
+    test_data_dim = 2
     test_channels = 1
     test_batch_size = 1
 

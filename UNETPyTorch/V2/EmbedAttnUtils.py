@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Iterable, Union
 from enum import auto, StrEnum
 import torch
 import math
@@ -258,6 +259,19 @@ class AttentionOptions(StrEnum):
     QKV = auto()
 
 
+@dataclass
+class AttentionArgs:
+    attn_order: Iterable[AttentionOptions]
+    enc_channels: Union[None, int] = None
+    skip_channels: Union[None, int] = None
+    channel_ratio: int = 8
+    spatial_inter_channels: Union[None, int] = None
+    qkv_heads: int = 1
+    use_pos: bool = False
+    pos_max_len: int = 0
+
+
+# TODO: Create Attention Params class just like ResNet
 class Attention(nn.Module):
     def __init__(self, attn_order, enc_channels, skip_channels=None, channel_ratio=8, spatial_inter_channels=None,
                  qkv_heads=1, use_pos=False, pos_max_len=0):

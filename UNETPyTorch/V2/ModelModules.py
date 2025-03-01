@@ -1,7 +1,7 @@
+import copy
+from dataclasses import asdict
 import sys
 import os
-import copy
-from torchinfo import summary
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from EmbedAttnUtils import *
 
@@ -71,8 +71,10 @@ class ConvSet(nn.Module):
             self.embed_adjuster = None
 
         # Setting attention
-        if attention_args is not None:
+        if isinstance(attention_args, dict):
             self.attention = Attention(**attention_args)
+        elif isinstance(attention_args, AttentionArgs):
+            self.attention = Attention(**asdict(attention_args))
         else:
             self.attention = None
 
@@ -171,8 +173,10 @@ class UpSample(nn.Module):
         super().__init__()
 
         # Setting attention
-        if attention_args is not None:
+        if isinstance(attention_args, dict):
             self.attention = Attention(**attention_args)
+        elif isinstance(attention_args, AttentionArgs):
+            self.attention = Attention(**asdict(attention_args))
         else:
             self.attention = None
 
@@ -261,11 +265,16 @@ class UNET(nn.Module):
             conv_function=self.conv_function, bn_function=self.bn_function, act_function=conv_act_fn,
             use_time=self.need_denoise, time_embed_count=denoise_embed_count, use_residual=conv_residual
         )
-        if up_attn_args is not None:
+        if isinstance(up_attn_args, dict):
             up_attn_args['enc_channels'] = channel_list[-1]
             up_attn_args['skip_channels'] = channel_list[-1]
             up_attn_args['spatial_inter_channels'] = channel_list[-1] // 2
             self.bottle_neck_attn = Attention(**up_attn_args)
+        elif isinstance(up_attn_args, AttentionArgs):
+            up_attn_args.enc_channels = channel_list[-1]
+            up_attn_args.skip_channels = channel_list[-1]
+            up_attn_args.spatial_inter_channels = channel_list[-1] // 2
+            self.bottle_neck_attn = Attention(**asdict(up_attn_args))
         else:
             self.bottle_neck_attn = None
 
@@ -402,9 +411,14 @@ class ResNet(nn.Module):
         self.out_layer = out_layer if out_layer is not None else nn.Identity()
 
     def create_resnet_layer(self, channel_sequence: list, kernel_sequence, padding_sequence, set_count, stride):
-        self.conv_attn_args['enc_channels'] = channel_sequence[-1]
-        self.conv_attn_args['skip_channels'] = channel_sequence[-1]
-        self.conv_attn_args['spatial_inter_channels'] = channel_sequence[-1] // 2
+        if isinstance(self.conv_attn_args, dict):
+            self.conv_attn_args['enc_channels'] = channel_sequence[-1]
+            self.conv_attn_args['skip_channels'] = channel_sequence[-1]
+            self.conv_attn_args['spatial_inter_channels'] = channel_sequence[-1] // 2
+        elif isinstance(self.conv_attn_args, AttentionArgs):
+            self.conv_attn_args.enc_channels = channel_sequence[-1]
+            self.conv_attn_args.skip_channels = channel_sequence[-1]
+            self.conv_attn_args.spatial_inter_channels = channel_sequence[-1] // 2
 
         set_list = [ConvSet(
             channel_sequence, kernel_sequence, padding_sequence, stride=stride, dims=self.data_dimensions,
