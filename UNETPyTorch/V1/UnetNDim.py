@@ -1,9 +1,6 @@
-import torch
 import math
 import copy
-import torch.nn as nn
-import torch.nn.functional as F
-from torchinfo import summary
+import torch
 
 import sys
 import os
@@ -306,13 +303,3 @@ class UNETNth(nn.Module):
 
         # Apply custom output layer and return
         return self.out_layer(cur_up)
-
-
-if __name__ == '__main__':
-    model = UNETNth(
-        dimensions=5, in_channels=1, channel_list=[64, 128, 256], out_layer=nn.Sigmoid(),
-        up_attention=True, attn_pool=True, up_drop_perc=0.5,
-        dconv_act_fn=nn.LeakyReLU(0.2, inplace=True), dconv_res=True
-    ).to("cuda")
-    print(model)
-    summary(model, input_size=(1, 1, 8, 8, 8, 8, 8), depth=10)

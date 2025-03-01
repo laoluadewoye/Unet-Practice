@@ -11,3 +11,5 @@ from .ModelWrappers import (
 )
 from .EmbedAttnUtils import DiffPosEmbeds, AttnPosEmbeds, AttentionOptions, AttentionArgs, Attention
 from .HigherDimUtils import ConvNd, ConvTransposeNd, BatchNormNd, MaxPoolNd, AvgPoolNd, InterpolateNd
+
+__version__ = "2.0"

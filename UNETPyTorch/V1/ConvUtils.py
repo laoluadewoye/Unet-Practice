@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -529,50 +528,3 @@ class InterpolateNd(nn.Module):
         final_tensor = one_dim_conv_tensor.reshape(shape[0], *size[1:], -1, size[0])
         final_tensor = final_tensor.permute(0, order[-2], order[-1], *order[1:-2])
         return final_tensor
-
-
-if __name__ == '__main__':
-    tensor = torch.randn(2, 1, 4, 4, 4, 4, 4)
-
-    conv = ConvNd(5, 1, 2, 3, 1, 0, 1)
-    conv_tensor = conv(tensor)
-
-    print("Convolution")
-    print(tensor.shape)
-    print(conv_tensor.shape)
-
-    conv = ConvTransposeNd(5, 1, 2, 3, 1, 0, 1, 0)
-    conv_tensor = conv(tensor)
-
-    print("Convolution Transpose")
-    print(tensor.shape)
-    print(conv_tensor.shape)
-
-    norm = BatchNormNd(5, 1)
-    n_tensor = norm(tensor)
-
-    print("Batch Norm")
-    print(tensor.shape)
-    print(n_tensor.shape)
-
-    pool = MaxPoolNd(5, 2, 2, 0, 1)
-    pool_tensor = pool(tensor)
-
-    print("Max Pool")
-    print(tensor.shape)
-    print(pool_tensor.shape)
-
-    pool = AvgPoolNd(5, 2, 2, 0)
-    pool_tensor = pool(tensor)
-
-    print("Avg Pool")
-    print(tensor.shape)
-    print(pool_tensor.shape)
-
-    tensor = torch.randn(2, 1, 7, 7, 7, 7, 7)
-    interpolate = InterpolateNd(5)
-    ip_tensor = interpolate(tensor, [8, 8, 8, 8, 8])
-
-    print("Interpolated Pool")
-    print(tensor.shape)
-    print(ip_tensor.shape)

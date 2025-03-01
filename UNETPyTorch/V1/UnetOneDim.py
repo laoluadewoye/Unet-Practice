@@ -3,7 +3,6 @@ import math
 import copy
 import torch.nn as nn
 import torch.nn.functional as F
-from torchinfo import summary
 
 
 # Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
@@ -291,13 +290,3 @@ class UNETOne(nn.Module):
 
         # Apply custom output layer and return
         return self.out_layer(cur_up)
-
-
-if __name__ == '__main__':
-    model = UNETOne(
-        in_channels=1, channel_list=[64, 128, 256, 512, 1024], out_layer=nn.Sigmoid(),
-        up_attention=True, attn_pool=True, up_drop_perc=0.5,
-        dconv_act_fn=nn.LeakyReLU(0.2, inplace=True), dconv_res=True
-    )
-    print(model)
-    summary(model, input_size=(1, 1, 64), depth=5)

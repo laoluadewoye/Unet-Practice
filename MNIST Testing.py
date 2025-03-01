@@ -1,4 +1,4 @@
-from UNETPyTorch.V1.UnetModel import GeneralUNETModel as GenUnetOne
+from UNETPyTorch.V1 import GeneralUNETModel as GenUnetOne
 from UNETPyTorch.V2 import GeneralUNETModel as GenUnetTwo
 from UNETPyTorch.V2 import AttentionOptions
 

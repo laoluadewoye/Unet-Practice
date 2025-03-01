@@ -1,10 +1,7 @@
-import torch
 import os
 import shutil
 import numpy as np
 import pandas as pd
-import torch.nn as nn
-import torch.nn.functional as F
 from torch.optim import Adam
 from torchvision import transforms
 import matplotlib.pyplot as plt
@@ -18,8 +15,6 @@ from UnetThreeDim import UNETThree
 from UnetNDim import UNETNth
 
 
-# TODO: Create a Res-Net model
-# TODO: Somehow shove a transformer into here
 def assert_ascending(lst):
     return all(lst[i] <= lst[i + 1] for i in range(len(lst) - 1))
 
