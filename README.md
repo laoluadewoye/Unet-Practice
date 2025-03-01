@@ -1,7 +1,7 @@
 # Major Credits
 
 Throughout the making of this package I used alot of resources from the internet. They all can be found in the 
-![Resources](./extras/Resources.txt) file in this repository. It was a mix of YouTube, online guides, and scholarly
+[Resources](./extras/Resources.txt) file in this repository. It was a mix of YouTube, online guides, and scholarly
 articles that helped me put this together, and I hope you find use out of it as well!
 
 # Welcome
