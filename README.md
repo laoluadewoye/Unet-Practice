@@ -72,6 +72,44 @@ may have otherwise been forgotten.
 
 # Understanding the Code
 
+## Checking for CUDA and Installing
+
+First off, check to see if you have cuda on your device because alot of the code is written to prefer running on the 
+GPU. To do this, open a command prompt and enter `nvidia-smi`. You should see an output similar to the following:
+
+```
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 560.94                 Driver Version: 560.94         CUDA Version: 12.6     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                  Driver-Model | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA GeForce RTX 3080 ...  WDDM  |   00000000:01:00.0 Off |                  N/A |
+| N/A   46C    P8             18W /   40W |       0MiB /  16384MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
++-----------------------------------------------------------------------------------------+
+```
+
+If you have cuda, the version would be at the top of the output where it says 'CUDA Version'.
+
+Next, download/clone the repository into a folder of your choice and open a command prompt in that folder.
+
+After that, to install the necessary dependencies, run the following command: `pip install -r requirements.txt 
+--index-url https://download.pytorch.org/whl/cu126`. I use the 'cu126' link because my cuda version is 12.6, but you 
+should check for yours at the [Pytorch Start Locally](https://pytorch.org/get-started/locally/) page to ensure nothing
+breaks. If your CUDA version is different from the ones available, then seek further help on how to install a supported 
+one.
+
+## How to Use the Package
+
 The main way to utilize the package is to use the wrappers that are brought up in each version, or to use the
 higher dimensional embeddings for your own purposes. 
 
