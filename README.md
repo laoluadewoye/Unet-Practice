@@ -153,7 +153,7 @@ You can import any module by doing "from UNETPyTorch.V[num] import [module]" whe
 Below is a code example of using the General UNET Models to analyze the MNIST number data. Both version one and version
 two are used to compare how similar they perform. Ideally, both should achieve the same levels of accuracy as the
 version improvements were mainly supposed to make it easier to incorporate more complex features. The code can be found
-[here](./MNIST Testing.py).
+[here](./MNIST_Testing.py).
 
 ```
 from UNETPyTorch.V1 import GeneralUNETModel as GenUnetOne
@@ -257,7 +257,7 @@ mnist_model_v2.test_model(test_loader=test_loader, loss_func=loss_module)
 ## Example 2: CIFAR Image Generation
 
 Below is a code example of the Version 1 UNET diffusion model to create randomly generate images based on the CIFAR
-dataset. It sucks, but the model itself works. The code can be found [here](./CIFAR Gen Testing.py).
+dataset. It sucks, but the model itself works. The code can be found [here](./CIFAR_Gen_Testing.py).
 
 ```
 from UNETPyTorch.V1 import DiffusionUNETModel
@@ -342,7 +342,7 @@ if __name__ == '__main__':
 Below is an example of how to pass in attention and resnet settings into the V2 model wrappers. Both dictionaries
 and the actual dataclasses are used to show how the model can handle both. No data is examined, but it does show
 a good job of showing how much better Version 2 is, including the print statements. The code can be found 
-[here](./Version Two Testing.py).
+[here](./Version_Two_Testing.py).
 
 ```
 from torch import nn
@@ -397,5 +397,4 @@ if __name__ == "__main__":
 
     # View ResNet summary
     print(var_dim_model)
-
 ```
