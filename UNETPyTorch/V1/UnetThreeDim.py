@@ -9,6 +9,8 @@ import torch.nn.functional as F
 
 
 # Initially Copied from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
+# TODO: Add typing
+# TODO: Add more documentation
 class DiffusionSinPosEmbeds(nn.Module):
     def __init__(self, dimensions, theta=10000):
         super().__init__()
@@ -25,6 +27,8 @@ class DiffusionSinPosEmbeds(nn.Module):
         return embeddings
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class DoubleConvThree(nn.Module):
     def __init__(self, in_channels, out_channels, dconv_act_fn=None, use_time=False, time_embed_count=0, use_res=False):
         super().__init__()
@@ -98,6 +102,8 @@ class DoubleConvThree(nn.Module):
         return conv_batch
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class SpatialAttentionThree(nn.Module):
     def __init__(self, dec_skip_channels, inter_channels, use_pool=False):
         super().__init__()
@@ -158,6 +164,8 @@ class SpatialAttentionThree(nn.Module):
         return skip * masked_int
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class DownSampleThree(nn.Module):
     def __init__(self, in_channels, out_channels, dconv_act_fn=None, dconv_time=False, time_embed_count=0,
                  dconv_res=False):
@@ -182,6 +190,8 @@ class DownSampleThree(nn.Module):
         return conv_batch, encoded_batch
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class UpSampleThree(nn.Module):
     def __init__(self, in_channels, out_channels, up_drop_perc=0.3, use_attention=False, attn_pool=False,
                  dconv_act_fn=None, dconv_time=False, time_embed_count=0, dconv_res=False):
@@ -223,6 +233,8 @@ class UpSampleThree(nn.Module):
         return self.conv(combined, time_embed)
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class UNETThree(nn.Module):
     def __init__(self, in_channels, channel_list, out_layer, denoise_diff=False, denoise_embed_count=0,
                  up_attention=False, attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, dconv_res=False):

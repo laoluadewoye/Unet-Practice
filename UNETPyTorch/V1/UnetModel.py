@@ -18,11 +18,15 @@ from UnetThreeDim import UNETThree
 from UnetNDim import UNETNth
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 def assert_ascending(lst):
     return all(lst[i] <= lst[i + 1] for i in range(len(lst) - 1))
 
 
 # Model based on DeepFind's "Diffusion models from scratch in PyTorch" video using my dynamic UNET as a base.
+# TODO: Add typing
+# TODO: Add more documentation
 class DiffusionUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
                  use_attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, use_dconv_res=False, loss_rate=0.002,
@@ -251,6 +255,8 @@ class DiffusionUNETModel:
         return results_df
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class GeneralUNETModel:
     def __init__(self, name, in_dimensions, in_channels, conv_channels, out_layer, use_up_atten=False,
                  use_attn_pool=False, up_drop_perc=0.3, dconv_act_fn=None, use_dconv_res=False, loss_rate=0.002):

@@ -5,6 +5,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 def down_output_size(input_size, input_index, kernel_size, stride, padding, dilation):
     ks_index = kernel_size[input_index]
     s_index = stride[input_index]
@@ -14,6 +16,8 @@ def down_output_size(input_size, input_index, kernel_size, stride, padding, dila
     return (input_size + 2 * p_index - d_index * (ks_index - 1) - 1) // s_index + 1
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 def avg_output_size(input_size, input_index, kernel_size, stride, padding):
     ks_index = kernel_size[input_index]
     s_index = stride[input_index]
@@ -22,6 +26,8 @@ def avg_output_size(input_size, input_index, kernel_size, stride, padding):
     return (input_size + 2 * p_index - ks_index) // s_index + 1
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 def up_output_size(input_size, input_index, kernel_size, stride, padding, dilation, output_padding):
     ks_index = kernel_size[input_index]
     s_index = stride[input_index]
@@ -33,6 +39,8 @@ def up_output_size(input_size, input_index, kernel_size, stride, padding, dilati
 
 
 # Simplified version of ConvNd using this as a guide: https://github.com/pvjosue/pytorch_convNd/blob/master/convNd.py
+# TODO: Add typing
+# TODO: Add more documentation
 class ConvNd(nn.Module):
     def __init__(self, dimensions, in_channels, out_channels, kernel_size, strides, padding, dilation):
         super().__init__()
@@ -139,6 +147,8 @@ class ConvNd(nn.Module):
         return final_tensor
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class ConvTransposeNd(nn.Module):
     def __init__(self, dimensions, in_channels, out_channels, kernel_size, strides, padding, dilation, output_padding):
         super().__init__()
@@ -254,6 +264,8 @@ class ConvTransposeNd(nn.Module):
         return final_tensor
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class BatchNormNd(nn.Module):
     def __init__(self, dimensions, out_channels):
         super().__init__()
@@ -280,6 +292,8 @@ class BatchNormNd(nn.Module):
         return norm_tensor
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class MaxPoolNd(nn.Module):
     def __init__(self, dimensions, kernel_size, strides, padding, dilation):
         super().__init__()
@@ -379,6 +393,8 @@ class MaxPoolNd(nn.Module):
         return final_tensor
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class AvgPoolNd(nn.Module):
     def __init__(self, dimensions, kernel_size, strides, padding):
         super().__init__()
@@ -472,6 +488,8 @@ class AvgPoolNd(nn.Module):
         return final_tensor
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class InterpolateNd(nn.Module):
     def __init__(self, dimensions):
         super().__init__()

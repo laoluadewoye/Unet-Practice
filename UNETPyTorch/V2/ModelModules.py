@@ -9,6 +9,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from EmbedAttnUtils import *
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class ConvSet(nn.Module):
     def __init__(self, channel_sequence, kernel_sequence, padding_sequence, dims=2, conv_function=nn.Conv2d,
                  bn_function=nn.BatchNorm2d, stride=1, act_function=None, use_time=False, time_embed_count=0,
@@ -138,6 +140,8 @@ class ConvSet(nn.Module):
         return conv_batch
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class DownSample(nn.Module):
     def __init__(self, channel_sequence, kernel_sequence, padding_sequence, dims=2, conv_function=nn.Conv2d,
                  bn_function=nn.BatchNorm2d, mp_function=nn.MaxPool2d, conv_act_fn=None, conv_time=False,
@@ -168,6 +172,8 @@ class DownSample(nn.Module):
         return conv_batch, encoded_batch
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class UpSample(nn.Module):
     def __init__(self, channel_sequence, kernel_sequence, padding_sequence, dims=2, conv_function=nn.Conv2d,
                  bn_function=nn.BatchNorm2d, conv_trans_func=nn.ConvTranspose2d, up_drop_perc=0.3, attention_args=None,
@@ -220,6 +226,8 @@ class UpSample(nn.Module):
         return self.conv(combined, time_embed)
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class UNET(nn.Module):
     def __init__(self, in_channels, channel_list, in_layer=None, out_layer=None, data_dims=2, conv_function=nn.Conv2d,
                  bn_function=nn.BatchNorm2d, mp_function=nn.MaxPool2d, conv_trans_func=nn.ConvTranspose2d,
@@ -372,6 +380,8 @@ class UNET(nn.Module):
         return self.out_layer(cur_up)
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class ResNet(nn.Module):
     def __init__(self, layer_channels_list, layer_kernels_list, layer_paddings_list, layer_set_list,
                  in_layer=None, out_layer=None, data_dims=2, conv_function=nn.Conv2d, bn_function=nn.BatchNorm2d,

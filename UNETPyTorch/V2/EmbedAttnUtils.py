@@ -11,6 +11,8 @@ import torch.nn.functional as F
 
 
 # Altered from Denoising Diffusion Tutorial - https://www.youtube.com/watch?v=a4Yfz2FxXiY
+# TODO: Add typing
+# TODO: Add more documentation
 class DiffPosEmbeds(nn.Module):
     def __init__(self, dimensions, theta=10000):
         super().__init__()
@@ -34,6 +36,8 @@ class DiffPosEmbeds(nn.Module):
 
 
 # Altered from PyTorch Transformer Tutorial - https://www.datacamp.com/tutorial/building-a-transformer-with-py-torch
+# TODO: Add typing
+# TODO: Add more documentation
 class AttnPosEmbeds(nn.Module):
     def __init__(self, channels, max_seq_length, theta=10000):
         super().__init__()
@@ -63,6 +67,8 @@ class AttnPosEmbeds(nn.Module):
         return flat_enc + self.embeds[:, :flat_enc.shape[1], :flat_enc.shape[2]]
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class ChannelAttention(nn.Module):
     def __init__(self, enc_channels, skip_channels=None, ratio=8):
         super().__init__()
@@ -123,6 +129,8 @@ class ChannelAttention(nn.Module):
         return pe_lin_skip * skip_int.permute(0, 2, 1)
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class SpatialAttention(nn.Module):
     def __init__(self, enc_channels, skip_channels=None, inter_channels=None):
         super().__init__()
@@ -189,6 +197,8 @@ class SpatialAttention(nn.Module):
         return pe_lin_skip * masked_int
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class QKVAttention(nn.Module):
     def __init__(self, enc_channels, skip_channels=None, heads=1):
         super().__init__()
@@ -256,12 +266,16 @@ class QKVAttention(nn.Module):
         return skip_out_values
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class AttentionOptions(StrEnum):
     CHANNEL = auto()
     SPATIAL = auto()
     QKV = auto()
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 @dataclass
 class AttentionArgs:
     attn_order: Iterable[AttentionOptions]
@@ -274,6 +288,8 @@ class AttentionArgs:
     pos_max_len: int = 0
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class Attention(nn.Module):
     def __init__(self, attn_order, enc_channels, skip_channels=None, channel_ratio=8, spatial_inter_channels=None,
                  qkv_heads=1, use_pos=False, pos_max_len=0):

@@ -19,10 +19,14 @@ from HigherDimUtils import *
 from ModelModules import UNET, ResNet
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 def assert_ascending(lst):
     return all(lst[i] <= lst[i + 1] for i in range(len(lst) - 1))
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class DiffusionUNETModel:
     def __init__(self, name, in_channels, channel_list, in_layer=None, out_layer=None, data_dims=2, up_drop_perc=0.3,
                  up_attn_args=None, conv_act_fn=None, conv_attn_args=None, conv_residual=False, loss_rate=0.002,
@@ -259,6 +263,8 @@ class DiffusionUNETModel:
         return results_df
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class GeneralUNETModel:
     def __init__(self, name, in_channels, channel_list, in_layer=None, out_layer=None, data_dims=2, up_drop_perc=0.3,
                  up_attn_args=None, conv_act_fn=None, conv_attn_args=None, conv_residual=False, loss_rate=0.002):
@@ -428,6 +434,8 @@ class GeneralUNETModel:
         return total_loss / total_count
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class ResNetPresets(StrEnum):
     RESNET18 = auto()
     RESNET34 = auto()
@@ -436,6 +444,8 @@ class ResNetPresets(StrEnum):
     RESNET152 = auto()
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 @dataclass
 class ResNetArgs:
     channel_list: Iterable[Iterable[int]]
@@ -444,6 +454,8 @@ class ResNetArgs:
     set_list: Iterable[int]
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class DiffusionResNetModel:
     def __init__(self, name, in_channels, preset=None, preset_out_classes=0, custom_resnet_args=None, in_layer=None,
                  out_layer=None, data_dims=2, conv_act_fn=None, conv_attn_args=None, conv_residual=False,
@@ -760,6 +772,8 @@ class DiffusionResNetModel:
         return results_df
 
 
+# TODO: Add typing
+# TODO: Add more documentation
 class GeneralResNetModel:
     def __init__(self, name, in_channels, preset=None, preset_out_classes=0, custom_resnet_args=None, in_layer=None,
                  out_layer=None, data_dims=2, conv_act_fn=None, conv_attn_args=None, conv_residual=False,
